@@ -17,19 +17,15 @@ public sealed class SubscriptionProcessor(
     ILogger<SubscriptionProcessor> logger)
 {
     public Task RunAsync(SubscriptionDefinition subscription, CancellationToken cancellationToken = default) =>
-        RunSubscriptionAsync(subscription, cancellationToken, isReplay: false);
+        RunSubscriptionAsync(subscription, cancellationToken);
 
     public Task RunReplayAsync(SubscriptionDefinition subscription, IAsyncEnumerable<SubscriptionEvent> replayStream, CancellationToken cancellationToken = default) =>
         RunStreamAsync(subscription with { }, replayStream, cancellationToken, isReplay: true);
 
-    private async Task RunSubscriptionAsync(SubscriptionDefinition subscription, CancellationToken cancellationToken, bool isReplay)
+    private async Task RunSubscriptionAsync(SubscriptionDefinition subscription, CancellationToken cancellationToken)
     {
         var checkpoint = await checkpointStore.GetAsync(subscription.Name, cancellationToken);
-        var stream = isReplay
-            ? eventReader.ReadAsync(subscription, null, cancellationToken)
-            : eventReader.ReadAsync(subscription, checkpoint, cancellationToken);
-
-        await RunStreamAsync(subscription, stream, cancellationToken, isReplay);
+        await RunStreamAsync(subscription, eventReader.ReadAsync(subscription, checkpoint, cancellationToken), cancellationToken);
     }
 
     private async Task RunStreamAsync(

@@ -39,6 +39,7 @@ public sealed class SubscriptionProcessorTests
         Assert.Empty(parkedStore.Items);
         Assert.Single(reader.CapturedCheckpoints);
         Assert.Equal(1, reader.CapturedCheckpoints[0]!.Position);
+        Assert.Equal("orders", reader.CapturedCheckpoints[0]!.SubscriptionName);
         Assert.Single(deliveryPipeline.DeliveredPositions);
         Assert.Equal(2, deliveryPipeline.DeliveredPositions[0]);
     }
