@@ -18,6 +18,18 @@ public sealed class InMemorySubscriptionConfigurationStore : ISubscriptionConfig
     public Task<IReadOnlyCollection<SubscriptionDefinition>> GetSubscriptionsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyCollection<SubscriptionDefinition>>(_subscriptions.Values.OrderBy(x => x.SubscriptionId).ToArray());
 
+    public Task UpsertAsync(SubscriptionDefinition subscription, CancellationToken cancellationToken = default)
+    {
+        _subscriptions[subscription.SubscriptionId] = subscription;
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveAsync(string subscriptionId, CancellationToken cancellationToken = default)
+    {
+        _subscriptions.TryRemove(subscriptionId, out _);
+        return Task.CompletedTask;
+    }
+
     public void Upsert(SubscriptionDefinition subscription) => _subscriptions[subscription.SubscriptionId] = subscription;
 
     public void Remove(string subscriptionId) => _subscriptions.TryRemove(subscriptionId, out _);

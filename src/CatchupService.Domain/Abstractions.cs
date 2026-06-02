@@ -3,6 +3,10 @@ namespace CatchupService.Domain;
 public interface ISubscriptionConfigurationStore
 {
     Task<IReadOnlyCollection<SubscriptionDefinition>> GetSubscriptionsAsync(CancellationToken cancellationToken = default);
+
+    Task UpsertAsync(SubscriptionDefinition subscription, CancellationToken cancellationToken = default);
+
+    Task RemoveAsync(string subscriptionId, CancellationToken cancellationToken = default);
 }
 
 public interface ICheckpointStore
