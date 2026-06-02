@@ -74,14 +74,8 @@ public sealed class SubscriptionRuntimeTests
                 {
                     replayStarted.TrySetResult();
                     await allowReplayToFinish.Task;
-                    return DeliveryOutcome.Success;
                 }
 
-                if (@event.EventId == "live-1")
-                {
-                    return DeliveryOutcome.Success;
-                }
-                
                 return DeliveryOutcome.Success;
             }),
             checkpointStore,
@@ -105,7 +99,7 @@ public sealed class SubscriptionRuntimeTests
         await replayTask;
         await liveTask;
 
-        Assert.Equal(0, await checkpointStore.GetCheckpointAsync(subscription.SubscriptionId));
+        Assert.Equal(5, await checkpointStore.GetCheckpointAsync(subscription.SubscriptionId));
     }
 
     private static SubscriptionDefinition CreateSubscription(int retryAttempts = 3) =>

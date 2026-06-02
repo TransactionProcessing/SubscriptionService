@@ -13,6 +13,7 @@ public sealed class Worker(
     IReplaySessionStore replaySessionStore,
     IEventDeliveryClient deliveryClient,
     ILoggerFactory loggerFactory,
+    WorkerOptions options,
     ILogger<Worker> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<string, RunningSubscription> _runningSubscriptions = new(StringComparer.OrdinalIgnoreCase);
@@ -50,7 +51,7 @@ public sealed class Worker(
                 }
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+            await Task.Delay(options.ConfigurationPollInterval, stoppingToken);
         }
     }
 

@@ -51,7 +51,7 @@ public sealed class SubscriptionRuntime(
                     parkedEvent.Payload,
                     parkedEvent.ContentType,
                     parkedEvent.Metadata,
-                    parkedEvent.ParkedAt);
+                    parkedEvent.OccurredAt);
 
                 await DeliverInternalAsync(subscription, replayEvent, isReplay: true, cancellationToken);
             }
