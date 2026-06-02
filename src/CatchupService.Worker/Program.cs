@@ -18,6 +18,7 @@ var subscriptionDatabaseConnectionString = builder.Configuration.GetConnectionSt
     ?? throw new InvalidOperationException("Missing connection string 'SubscriptionServiceDb'.");
 var connectionString = builder.Configuration.GetConnectionString("KurrentDb")
     ?? throw new InvalidOperationException("Missing connection string 'KurrentDb'.");
+var deliveryClientMode = builder.Configuration.GetValue("SubscriptionService:DeliveryClient", "http");
 builder.Services.AddDbContextFactory<CatchupServiceDbContext>(options => options.UseSqlServer(subscriptionDatabaseConnectionString));
 builder.Services.AddSingleton<ISubscriptionConfigurationStore, SqlSubscriptionConfigurationStore>();
 builder.Services.AddSingleton(new KurrentDBClient(KurrentDBClientSettings.Create(connectionString)));
@@ -29,7 +30,14 @@ builder.Services.AddSingleton(
     new WorkerOptions(
         TimeSpan.FromSeconds(builder.Configuration.GetValue("SubscriptionService:ConfigurationPollIntervalSeconds", WorkerOptions.Default.ConfigurationPollInterval.TotalSeconds)),
         WorkerOptions.Default.SubscriptionResubscribeDelay));
-builder.Services.AddHttpClient<IEventDeliveryClient, HttpEventDeliveryClient>();
+if (string.Equals(deliveryClientMode, "console", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IEventDeliveryClient, ConsoleEventDeliveryClient>();
+}
+else
+{
+    builder.Services.AddHttpClient<IEventDeliveryClient, HttpEventDeliveryClient>();
+}
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
