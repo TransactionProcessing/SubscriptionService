@@ -9,7 +9,7 @@ public sealed class CatchupServiceDbContextFactory : IDesignTimeDbContextFactory
     {
         var connectionString = Environment.GetEnvironmentVariable("SubscriptionServiceDb")
             ?? Environment.GetEnvironmentVariable("ConnectionStrings__SubscriptionServiceDb")
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=CatchupService;Trusted_Connection=True;TrustServerCertificate=True";
+            ?? "Server=localhost,1433;Database=CatchupService;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
 
         var optionsBuilder = new DbContextOptionsBuilder<CatchupServiceDbContext>();
         optionsBuilder.UseSqlServer(connectionString);
