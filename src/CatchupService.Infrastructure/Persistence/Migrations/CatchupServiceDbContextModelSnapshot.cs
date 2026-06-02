@@ -61,10 +61,10 @@ public partial class CatchupServiceDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("AuthenticationParametersJson");
             b.Property<string>("SecondaryIndexName").HasMaxLength(200);
             b.Property<string>("Tag").HasMaxLength(200);
-            b.Property<long>("PollIntervalTicks");
-            b.Property<long>("RequestTimeoutTicks");
+            b.Property<long>("PollIntervalSeconds");
+            b.Property<long>("RequestTimeoutSeconds");
             b.Property<int>("RetryMaxAttempts");
-            b.Property<long>("RetryDelayTicks");
+            b.Property<long>("RetryDelaySeconds");
             b.HasKey("SubscriptionId");
             b.ToTable("SubscriptionConfigurations");
         });

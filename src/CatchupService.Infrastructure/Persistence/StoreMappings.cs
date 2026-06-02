@@ -10,8 +10,8 @@ internal static class StoreMappings
             entity.SecondaryIndexName,
             entity.EndpointUrl,
             entity.Tag,
-            new TimeoutSettings(TimeSpan.FromTicks(entity.RequestTimeoutTicks), TimeSpan.FromTicks(entity.PollIntervalTicks)),
-            new RetrySettings(entity.RetryMaxAttempts, TimeSpan.FromTicks(entity.RetryDelayTicks)),
+            new TimeoutSettings(TimeSpan.FromSeconds(entity.RequestTimeoutSeconds), TimeSpan.FromSeconds(entity.PollIntervalSeconds)),
+            new RetrySettings(entity.RetryMaxAttempts, TimeSpan.FromSeconds(entity.RetryDelaySeconds)),
             new CheckpointSettings(entity.CheckpointBatchSize),
             string.IsNullOrWhiteSpace(entity.AuthenticationScheme) && string.IsNullOrWhiteSpace(entity.AuthenticationParametersJson)
                 ? null
@@ -26,10 +26,10 @@ internal static class StoreMappings
             SecondaryIndexName = subscription.SecondaryIndexName,
             EndpointUrl = subscription.EndpointUrl,
             Tag = subscription.Tag,
-            RequestTimeoutTicks = subscription.Timeout.RequestTimeout.Ticks,
-            PollIntervalTicks = subscription.Timeout.PollInterval.Ticks,
+            RequestTimeoutSeconds = Math.Max(0L, (long)Math.Ceiling(subscription.Timeout.RequestTimeout.TotalSeconds)),
+            PollIntervalSeconds = Math.Max(0L, (long)Math.Ceiling(subscription.Timeout.PollInterval.TotalSeconds)),
             RetryMaxAttempts = subscription.Retry.MaxAttempts,
-            RetryDelayTicks = subscription.Retry.Delay.Ticks,
+            RetryDelaySeconds = Math.Max(0L, (long)Math.Ceiling(subscription.Retry.Delay.TotalSeconds)),
             CheckpointBatchSize = subscription.Checkpoint.BatchSize,
             AuthenticationScheme = subscription.Authentication?.Scheme,
             AuthenticationParametersJson = subscription.Authentication is null

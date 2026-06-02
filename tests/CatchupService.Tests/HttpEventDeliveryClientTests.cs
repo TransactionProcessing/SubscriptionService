@@ -20,7 +20,7 @@ public sealed class HttpEventDeliveryClientTests
             "https://example.test/subscriptions/sub-1",
             "orders",
             new TimeoutSettings(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(1)),
-            new RetrySettings(3, TimeSpan.FromMilliseconds(10)),
+            new RetrySettings(3, TimeSpan.FromSeconds(1)),
             new CheckpointSettings(10));
 
         var @event = SubscriptionEvent.Create(

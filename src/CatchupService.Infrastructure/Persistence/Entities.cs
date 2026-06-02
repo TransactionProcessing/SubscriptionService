@@ -10,13 +10,13 @@ public sealed class SubscriptionConfigurationEntity
 
     public string Tag { get; set; } = string.Empty;
 
-    public long RequestTimeoutTicks { get; set; }
+    public long RequestTimeoutSeconds { get; set; }
 
-    public long PollIntervalTicks { get; set; }
+    public long PollIntervalSeconds { get; set; }
 
     public int RetryMaxAttempts { get; set; }
 
-    public long RetryDelayTicks { get; set; }
+    public long RetryDelaySeconds { get; set; }
 
     public int CheckpointBatchSize { get; set; }
 
