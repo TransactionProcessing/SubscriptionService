@@ -108,7 +108,7 @@ public sealed class SubscriptionRuntimeTests
             "index-1",
             "https://example.test/subscriptions/sub-1",
             "orders",
-            new TimeoutSettings(TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(10)),
+            new TimeoutSettings(TimeSpan.FromSeconds(5)),
             new RetrySettings(retryAttempts, TimeSpan.Zero),
             new CheckpointSettings(10));
 

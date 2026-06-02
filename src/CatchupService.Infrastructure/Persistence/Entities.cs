@@ -12,8 +12,6 @@ public sealed class SubscriptionConfigurationEntity
 
     public long RequestTimeoutSeconds { get; set; }
 
-    public long PollIntervalSeconds { get; set; }
-
     public int RetryMaxAttempts { get; set; }
 
     public long RetryDelaySeconds { get; set; }

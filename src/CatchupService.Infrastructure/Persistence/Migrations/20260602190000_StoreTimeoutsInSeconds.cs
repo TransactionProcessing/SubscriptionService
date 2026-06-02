@@ -14,20 +14,18 @@ public partial class StoreTimeoutsInSeconds : Migration
             newName: "RequestTimeoutSeconds");
 
         migrationBuilder.RenameColumn(
-            name: "PollIntervalTicks",
-            table: "SubscriptionConfigurations",
-            newName: "PollIntervalSeconds");
-
-        migrationBuilder.RenameColumn(
             name: "RetryDelayTicks",
             table: "SubscriptionConfigurations",
             newName: "RetryDelaySeconds");
+
+        migrationBuilder.DropColumn(
+            name: "PollIntervalTicks",
+            table: "SubscriptionConfigurations");
 
         migrationBuilder.Sql("""
             UPDATE dbo.SubscriptionConfigurations
             SET
                 RequestTimeoutSeconds = CASE WHEN RequestTimeoutSeconds = 0 THEN 0 ELSE (RequestTimeoutSeconds + 9999999) / 10000000 END,
-                PollIntervalSeconds = CASE WHEN PollIntervalSeconds = 0 THEN 0 ELSE (PollIntervalSeconds + 9999999) / 10000000 END,
                 RetryDelaySeconds = CASE WHEN RetryDelaySeconds = 0 THEN 0 ELSE (RetryDelaySeconds + 9999999) / 10000000 END;
             """);
     }
@@ -38,7 +36,6 @@ public partial class StoreTimeoutsInSeconds : Migration
             UPDATE dbo.SubscriptionConfigurations
             SET
                 RequestTimeoutSeconds = RequestTimeoutSeconds * 10000000,
-                PollIntervalSeconds = PollIntervalSeconds * 10000000,
                 RetryDelaySeconds = RetryDelaySeconds * 10000000;
             """);
 
@@ -48,13 +45,15 @@ public partial class StoreTimeoutsInSeconds : Migration
             newName: "RequestTimeoutTicks");
 
         migrationBuilder.RenameColumn(
-            name: "PollIntervalSeconds",
-            table: "SubscriptionConfigurations",
-            newName: "PollIntervalTicks");
-
-        migrationBuilder.RenameColumn(
             name: "RetryDelaySeconds",
             table: "SubscriptionConfigurations",
             newName: "RetryDelayTicks");
+
+        migrationBuilder.AddColumn<long>(
+            name: "PollIntervalTicks",
+            table: "SubscriptionConfigurations",
+            type: "bigint",
+            nullable: false,
+            defaultValue: 0L);
     }
 }

@@ -7,6 +7,7 @@ public sealed class SubscriptionPoller(
     ISubscriptionEventSource eventSource,
     ICheckpointStore checkpointStore,
     SubscriptionRuntime runtime,
+    TimeSpan resubscribeDelay,
     ILogger<SubscriptionPoller> logger)
 {
     public async Task RunAsync(SubscriptionDefinition subscription, CancellationToken cancellationToken = default)
@@ -40,7 +41,7 @@ public sealed class SubscriptionPoller(
                 return;
             }
 
-            await Task.Delay(subscription.Timeout.PollInterval, cancellationToken);
+            await Task.Delay(resubscribeDelay, cancellationToken);
         }
     }
 }

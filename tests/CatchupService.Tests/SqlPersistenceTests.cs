@@ -39,7 +39,7 @@ public sealed class SqlPersistenceTests
             "index-1",
             "https://example.test/subscriptions/sub-1",
             "orders",
-            new TimeoutSettings(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(2)),
+            new TimeoutSettings(TimeSpan.FromSeconds(10)),
             new RetrySettings(5, TimeSpan.FromSeconds(1)),
             new CheckpointSettings(50),
             new AuthenticationConfiguration("Bearer", new Dictionary<string, string> { ["token"] = "abc" }));

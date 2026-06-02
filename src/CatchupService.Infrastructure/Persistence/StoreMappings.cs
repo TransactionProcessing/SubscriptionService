@@ -10,7 +10,7 @@ internal static class StoreMappings
             entity.SecondaryIndexName,
             entity.EndpointUrl,
             entity.Tag,
-            new TimeoutSettings(TimeSpan.FromSeconds(entity.RequestTimeoutSeconds), TimeSpan.FromSeconds(entity.PollIntervalSeconds)),
+            new TimeoutSettings(TimeSpan.FromSeconds(entity.RequestTimeoutSeconds)),
             new RetrySettings(entity.RetryMaxAttempts, TimeSpan.FromSeconds(entity.RetryDelaySeconds)),
             new CheckpointSettings(entity.CheckpointBatchSize),
             string.IsNullOrWhiteSpace(entity.AuthenticationScheme) && string.IsNullOrWhiteSpace(entity.AuthenticationParametersJson)
@@ -27,7 +27,6 @@ internal static class StoreMappings
             EndpointUrl = subscription.EndpointUrl,
             Tag = subscription.Tag,
             RequestTimeoutSeconds = Math.Max(0L, (long)Math.Ceiling(subscription.Timeout.RequestTimeout.TotalSeconds)),
-            PollIntervalSeconds = Math.Max(0L, (long)Math.Ceiling(subscription.Timeout.PollInterval.TotalSeconds)),
             RetryMaxAttempts = subscription.Retry.MaxAttempts,
             RetryDelaySeconds = Math.Max(0L, (long)Math.Ceiling(subscription.Retry.Delay.TotalSeconds)),
             CheckpointBatchSize = subscription.Checkpoint.BatchSize,

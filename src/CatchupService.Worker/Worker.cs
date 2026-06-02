@@ -68,6 +68,7 @@ public sealed class Worker(
             eventSource,
             checkpointStore,
             runtime,
+            options.SubscriptionResubscribeDelay,
             loggerFactory.CreateLogger<SubscriptionPoller>());
 
         var running = new RunningSubscription(subscription, cts, Task.Run(() => poller.RunAsync(subscription, cts.Token), cts.Token));

@@ -19,7 +19,7 @@ public sealed class HttpEventDeliveryClientTests
             "index-1",
             "https://example.test/subscriptions/sub-1",
             "orders",
-            new TimeoutSettings(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(1)),
+            new TimeoutSettings(TimeSpan.FromSeconds(5)),
             new RetrySettings(3, TimeSpan.FromSeconds(1)),
             new CheckpointSettings(10));
 

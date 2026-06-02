@@ -10,9 +10,9 @@ public sealed record CheckpointSettings(int BatchSize)
     public static CheckpointSettings Default { get; } = new(100);
 }
 
-public sealed record TimeoutSettings(TimeSpan RequestTimeout, TimeSpan PollInterval)
+public sealed record TimeoutSettings(TimeSpan RequestTimeout)
 {
-    public static TimeoutSettings Default { get; } = new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(5));
+    public static TimeoutSettings Default { get; } = new(TimeSpan.FromSeconds(30));
 }
 
 public sealed record AuthenticationConfiguration(string? Scheme, IReadOnlyDictionary<string, string> Parameters)

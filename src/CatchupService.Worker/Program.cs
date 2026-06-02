@@ -25,7 +25,10 @@ builder.Services.AddSingleton<ISubscriptionEventSource, KurrentSubscriptionEvent
 builder.Services.AddSingleton<ICheckpointStore, SqlCheckpointStore>();
 builder.Services.AddSingleton<IParkedEventStore, SqlParkedEventStore>();
 builder.Services.AddSingleton<IReplaySessionStore, SqlReplaySessionStore>();
-builder.Services.AddSingleton(new WorkerOptions(TimeSpan.FromSeconds(builder.Configuration.GetValue("SubscriptionService:ConfigurationPollIntervalSeconds", WorkerOptions.Default.ConfigurationPollInterval.TotalSeconds))));
+builder.Services.AddSingleton(
+    new WorkerOptions(
+        TimeSpan.FromSeconds(builder.Configuration.GetValue("SubscriptionService:ConfigurationPollIntervalSeconds", WorkerOptions.Default.ConfigurationPollInterval.TotalSeconds)),
+        WorkerOptions.Default.SubscriptionResubscribeDelay));
 builder.Services.AddHttpClient<IEventDeliveryClient, HttpEventDeliveryClient>();
 builder.Services.AddHostedService<Worker>();
 
