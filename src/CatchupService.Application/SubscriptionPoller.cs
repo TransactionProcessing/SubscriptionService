@@ -14,30 +14,33 @@ public sealed class SubscriptionPoller(
         while (!cancellationToken.IsCancellationRequested)
         {
             var checkpoint = await checkpointStore.GetCheckpointAsync(subscription.SubscriptionId, cancellationToken);
-            var batch = await eventSource.ReadBatchAsync(
-                subscription.SecondaryIndexName,
+            var paused = false;
+
+            await eventSource.SubscribeAsync(
+                subscription,
                 checkpoint,
-                subscription.Checkpoint.BatchSize,
+                async (@event, eventCancellationToken) =>
+                {
+                    var delivered = await runtime.DeliverLiveAsync(subscription, @event, eventCancellationToken);
+                    if (!delivered)
+                    {
+                        logger.LogWarning(
+                            "Subscription {SubscriptionId} paused after event {EventId} was parked",
+                            subscription.SubscriptionId,
+                            @event.EventId);
+                        paused = true;
+                    }
+
+                    return delivered;
+                },
                 cancellationToken);
 
-            if (batch.Count == 0)
+            if (paused || cancellationToken.IsCancellationRequested)
             {
-                await Task.Delay(subscription.Timeout.PollInterval, cancellationToken);
-                continue;
+                return;
             }
 
-            foreach (var @event in batch.OrderBy(x => x.SequenceNumber))
-            {
-                var delivered = await runtime.DeliverLiveAsync(subscription, @event, cancellationToken);
-                if (!delivered)
-                {
-                    logger.LogWarning(
-                        "Subscription {SubscriptionId} paused after event {EventId} was parked",
-                        subscription.SubscriptionId,
-                        @event.EventId);
-                    return;
-                }
-            }
+            await Task.Delay(subscription.Timeout.PollInterval, cancellationToken);
         }
     }
 }

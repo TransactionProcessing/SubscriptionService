@@ -28,9 +28,9 @@ public interface IReplaySessionStore
 
 public interface ISubscriptionEventSource
 {
-    Task<IReadOnlyCollection<SubscriptionEvent>> ReadBatchAsync(
-        string secondaryIndexName,
+    Task SubscribeAsync(
+        SubscriptionDefinition subscription,
         long afterSequenceNumber,
-        int take,
+        Func<SubscriptionEvent, CancellationToken, Task<bool>> eventAppeared,
         CancellationToken cancellationToken = default);
 }

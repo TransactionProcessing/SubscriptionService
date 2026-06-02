@@ -93,24 +93,29 @@ public sealed class InMemorySubscriptionEventSource : ISubscriptionEventSource
         }
     }
 
-    public Task<IReadOnlyCollection<SubscriptionEvent>> ReadBatchAsync(
-        string secondaryIndexName,
+    public async Task SubscribeAsync(
+        SubscriptionDefinition subscription,
         long afterSequenceNumber,
-        int take,
+        Func<SubscriptionEvent, CancellationToken, Task<bool>> eventAppeared,
         CancellationToken cancellationToken = default)
     {
-        if (!_events.TryGetValue(secondaryIndexName, out var events))
+        if (_events.TryGetValue(subscription.SecondaryIndexName, out var events))
         {
-            return Task.FromResult<IReadOnlyCollection<SubscriptionEvent>>(Array.Empty<SubscriptionEvent>());
+            var batch = events
+                .Where(x => x.SequenceNumber > afterSequenceNumber)
+                .OrderBy(x => x.SequenceNumber)
+                .ToArray();
+
+            foreach (var @event in batch)
+            {
+                if (!await eventAppeared(@event, cancellationToken))
+                {
+                    return;
+                }
+            }
         }
 
-        var batch = events
-            .Where(x => x.SequenceNumber > afterSequenceNumber)
-            .OrderBy(x => x.SequenceNumber)
-            .Take(take)
-            .ToArray();
-
-        return Task.FromResult<IReadOnlyCollection<SubscriptionEvent>>(batch);
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
     }
 
     public void Add(SubscriptionEvent @event)

@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="KurrentDB.Client" Version="1.4.0" />
     <ProjectReference Include="..\CatchupService.Application\CatchupService.Application.csproj" />
     <ProjectReference Include="..\CatchupService.Domain\CatchupService.Domain.csproj" />
   </ItemGroup>
