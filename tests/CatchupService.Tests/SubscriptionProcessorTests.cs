@@ -19,8 +19,9 @@ public sealed class SubscriptionProcessorTests
         };
 
         var reader = new SequenceSubscriptionEventReader(events);
-        var deliveryPipeline = new ScriptedDeliveryPipeline(DeliveryResult.Success(204), DeliveryResult.Failure(500, "boom"));
+        var deliveryPipeline = new ScriptedDeliveryPipeline(DeliveryResult.Success(204));
         var checkpointStore = new InMemoryCheckpointStore();
+        await checkpointStore.SaveAsync(new SubscriptionCheckpoint("orders", 1, DateTimeOffset.UtcNow));
         var parkedStore = new InMemoryParkedEventStore();
         var processor = new SubscriptionProcessor(
             reader,
@@ -34,9 +35,12 @@ public sealed class SubscriptionProcessorTests
 
         var checkpoint = await checkpointStore.GetAsync("orders");
         Assert.NotNull(checkpoint);
-        Assert.Equal(1, checkpoint!.Position);
-        Assert.Single(parkedStore.Items);
-        Assert.Equal(2, parkedStore.Items[0].Position);
+        Assert.Equal(2, checkpoint!.Position);
+        Assert.Empty(parkedStore.Items);
+        Assert.Single(reader.CapturedCheckpoints);
+        Assert.Equal(1, reader.CapturedCheckpoints[0]!.Position);
+        Assert.Single(deliveryPipeline.DeliveredPositions);
+        Assert.Equal(2, deliveryPipeline.DeliveredPositions[0]);
     }
 
     private static SubscriptionEvent CreateEvent(long position) => new(
@@ -49,10 +53,21 @@ public sealed class SubscriptionProcessorTests
 
     private sealed class SequenceSubscriptionEventReader(IEnumerable<SubscriptionEvent> events) : ISubscriptionEventReader
     {
-        public async IAsyncEnumerable<SubscriptionEvent> ReadAsync(SubscriptionDefinition subscription, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public List<SubscriptionCheckpoint?> CapturedCheckpoints { get; } = [];
+
+        public async IAsyncEnumerable<SubscriptionEvent> ReadAsync(
+            SubscriptionDefinition subscription,
+            SubscriptionCheckpoint? checkpoint,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            CapturedCheckpoints.Add(checkpoint);
             foreach (var item in events)
             {
+                if (checkpoint is not null && item.Position <= checkpoint.Position)
+                {
+                    continue;
+                }
+
                 yield return item;
                 await Task.Yield();
             }
@@ -62,9 +77,11 @@ public sealed class SubscriptionProcessorTests
     private sealed class ScriptedDeliveryPipeline(params DeliveryResult[] results) : IEventDeliveryPipeline
     {
         private readonly Queue<DeliveryResult> _results = new(results);
+        public List<long> DeliveredPositions { get; } = [];
 
         public Task<DeliveryResult> DeliverAsync(SubscriptionEvent subscriptionEvent, CancellationToken cancellationToken = default)
         {
+            DeliveredPositions.Add(subscriptionEvent.Position);
             return Task.FromResult(_results.Count > 0 ? _results.Dequeue() : DeliveryResult.Success(204));
         }
     }
@@ -84,6 +101,7 @@ public sealed class SubscriptionProcessorTests
             _checkpoints[checkpoint.SubscriptionName] = checkpoint;
             return Task.CompletedTask;
         }
+
     }
 
     private sealed class InMemoryParkedEventStore : IParkedEventStore

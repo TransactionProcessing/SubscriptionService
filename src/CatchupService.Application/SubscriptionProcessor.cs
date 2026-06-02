@@ -17,10 +17,20 @@ public sealed class SubscriptionProcessor(
     ILogger<SubscriptionProcessor> logger)
 {
     public Task RunAsync(SubscriptionDefinition subscription, CancellationToken cancellationToken = default) =>
-        RunStreamAsync(subscription, eventReader.ReadAsync(subscription, cancellationToken), cancellationToken);
+        RunSubscriptionAsync(subscription, cancellationToken, isReplay: false);
 
     public Task RunReplayAsync(SubscriptionDefinition subscription, IAsyncEnumerable<SubscriptionEvent> replayStream, CancellationToken cancellationToken = default) =>
         RunStreamAsync(subscription with { }, replayStream, cancellationToken, isReplay: true);
+
+    private async Task RunSubscriptionAsync(SubscriptionDefinition subscription, CancellationToken cancellationToken, bool isReplay)
+    {
+        var checkpoint = await checkpointStore.GetAsync(subscription.Name, cancellationToken);
+        var stream = isReplay
+            ? eventReader.ReadAsync(subscription, null, cancellationToken)
+            : eventReader.ReadAsync(subscription, checkpoint, cancellationToken);
+
+        await RunStreamAsync(subscription, stream, cancellationToken, isReplay);
+    }
 
     private async Task RunStreamAsync(
         SubscriptionDefinition subscription,
@@ -63,18 +73,9 @@ public sealed class SubscriptionProcessor(
         ChannelReader<SubscriptionEvent> reader,
         CancellationToken cancellationToken)
     {
-        var checkpoint = await checkpointStore.GetAsync(subscription.Name, cancellationToken);
+        SubscriptionCheckpoint? checkpoint = null;
         await foreach (var subscriptionEvent in reader.ReadAllAsync(cancellationToken))
         {
-            if (checkpoint is not null && subscriptionEvent.Position <= checkpoint.Position)
-            {
-                logger.LogDebug(
-                    "Skipping already checkpointed event {Position} for {Subscription}",
-                    subscriptionEvent.Position,
-                    subscription.Name);
-                continue;
-            }
-
             var delivered = await DeliverWithRetryAsync(subscription, subscriptionEvent, cancellationToken);
             if (delivered.Succeeded)
             {

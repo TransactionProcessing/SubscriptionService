@@ -2,5 +2,8 @@ namespace CatchupService.Core;
 
 public interface ISubscriptionEventReader
 {
-    IAsyncEnumerable<SubscriptionEvent> ReadAsync(SubscriptionDefinition subscription, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<SubscriptionEvent> ReadAsync(
+        SubscriptionDefinition subscription,
+        SubscriptionCheckpoint? checkpoint,
+        CancellationToken cancellationToken = default);
 }
