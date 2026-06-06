@@ -42,7 +42,9 @@ public sealed class SqlPersistenceTests
             new TimeoutSettings(TimeSpan.FromSeconds(10)),
             new RetrySettings(5, TimeSpan.FromSeconds(1)),
             new CheckpointSettings(50),
-            new AuthenticationConfiguration("Bearer", new Dictionary<string, string> { ["token"] = "abc" }));
+            false,
+            new AuthenticationConfiguration("Bearer", new Dictionary<string, string> { ["token"] = "abc" }))
+        { Enabled = false };
 
         await subscriptionStore.UpsertAsync(subscription);
 
@@ -51,19 +53,20 @@ public sealed class SqlPersistenceTests
         Assert.Equal(subscription.SubscriptionId, storedSubscription.SubscriptionId);
         Assert.Equal("Bearer", storedSubscription.Authentication?.Scheme);
         Assert.Equal("abc", storedSubscription.Authentication?.Parameters["token"]);
+        Assert.False(storedSubscription.Enabled);
 
-        await checkpointStore.SaveCheckpointAsync(subscription.SubscriptionId, 42);
-        Assert.Equal(42, await checkpointStore.GetCheckpointAsync(subscription.SubscriptionId));
+        await checkpointStore.SaveCheckpointAsync(subscription.SubscriptionId, 42, 0, null);
+        var cp = await checkpointStore.GetCheckpointAsync(subscription.SubscriptionId);
+        Assert.Equal(42, cp.CommitPosition);
 
         var parkedEvent = ParkedEvent.FromEvent(
             SubscriptionEvent.Create(
                 "evt-1",
                 subscription.SubscriptionId,
                 subscription.SecondaryIndexName,
-                99,
                 "orders-99",
                 "order.created",
-                [1, 2, 3],
+                new byte[] { 1, 2, 3 },
                 "application/json",
                 new Dictionary<string, string> { ["customer-id"] = "c-123" }),
             "failed",

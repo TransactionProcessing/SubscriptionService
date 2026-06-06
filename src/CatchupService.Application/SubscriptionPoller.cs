@@ -26,10 +26,18 @@ public sealed class SubscriptionPoller(
                     if (!delivered)
                     {
                         logger.LogWarning(
-                            "Subscription {SubscriptionId} paused after event {EventId} was parked",
+                            "Subscription {SubscriptionId} parked event {EventId}",
                             subscription.SubscriptionId,
                             @event.EventId);
-                        paused = true;
+
+                        if (!subscription.ContinueOnParked)
+                        {
+                            paused = true;
+                            return false;
+                        }
+
+                        // If configured to continue on parked, return true so subscription keeps processing
+                        return true;
                     }
 
                     return delivered;

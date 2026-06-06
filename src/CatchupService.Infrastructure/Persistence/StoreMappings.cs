@@ -4,8 +4,9 @@ namespace CatchupService.Infrastructure.Persistence;
 
 internal static class StoreMappings
 {
-    public static SubscriptionDefinition ToDomain(this SubscriptionConfigurationEntity entity) =>
-        new(
+    public static SubscriptionDefinition ToDomain(this SubscriptionConfigurationEntity entity)
+    {
+        var def = new SubscriptionDefinition(
             entity.SubscriptionId,
             entity.SecondaryIndexName,
             entity.EndpointUrl,
@@ -13,11 +14,15 @@ internal static class StoreMappings
             new TimeoutSettings(TimeSpan.FromSeconds(entity.RequestTimeoutSeconds)),
             new RetrySettings(entity.RetryMaxAttempts, TimeSpan.FromSeconds(entity.RetryDelaySeconds)),
             new CheckpointSettings(entity.CheckpointBatchSize),
+            entity.ContinueOnParked,
             string.IsNullOrWhiteSpace(entity.AuthenticationScheme) && string.IsNullOrWhiteSpace(entity.AuthenticationParametersJson)
                 ? null
                 : new AuthenticationConfiguration(
                     entity.AuthenticationScheme,
                     JsonPersistence.DeserializeDictionary(entity.AuthenticationParametersJson)));
+
+        return def with { Enabled = entity.Enabled, SoftDeleteParked = entity.SoftDeleteParked };
+    }
 
     public static SubscriptionConfigurationEntity ToEntity(this SubscriptionDefinition subscription) =>
         new()
@@ -30,6 +35,9 @@ internal static class StoreMappings
             RetryMaxAttempts = subscription.Retry.MaxAttempts,
             RetryDelaySeconds = Math.Max(0L, (long)Math.Ceiling(subscription.Retry.Delay.TotalSeconds)),
             CheckpointBatchSize = subscription.Checkpoint.BatchSize,
+            ContinueOnParked = subscription.ContinueOnParked,
+            Enabled = subscription.Enabled,
+            SoftDeleteParked = subscription.SoftDeleteParked,
             AuthenticationScheme = subscription.Authentication?.Scheme,
             AuthenticationParametersJson = subscription.Authentication is null
                 ? null
@@ -42,7 +50,8 @@ internal static class StoreMappings
             ParkedEventId = parkedEvent.ParkedEventId,
             SubscriptionId = parkedEvent.SubscriptionId,
             EventId = parkedEvent.EventId,
-            SequenceNumber = parkedEvent.SequenceNumber,
+            // SequenceNumber removed from domain; legacy DB column remains for ordering but not provided by domain events
+            SequenceNumber = 0,
             StreamName = parkedEvent.StreamName,
             EventType = parkedEvent.EventType,
             OccurredAt = parkedEvent.OccurredAt,
@@ -59,7 +68,6 @@ internal static class StoreMappings
             entity.ParkedEventId,
             entity.SubscriptionId,
             entity.EventId,
-            entity.SequenceNumber,
             entity.StreamName,
             entity.EventType,
             entity.OccurredAt,

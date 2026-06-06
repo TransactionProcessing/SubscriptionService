@@ -18,6 +18,12 @@ public sealed class SubscriptionConfigurationEntity
 
     public int CheckpointBatchSize { get; set; }
 
+    public bool ContinueOnParked { get; set; }
+
+    public bool Enabled { get; set; } = true;
+
+    public bool SoftDeleteParked { get; set; } = true;
+
     public string? AuthenticationScheme { get; set; }
 
     public string? AuthenticationParametersJson { get; set; }
@@ -27,7 +33,13 @@ public sealed class SubscriptionCheckpointEntity
 {
     public string SubscriptionId { get; set; } = string.Empty;
 
-    public long Checkpoint { get; set; }
+    // Sequence checkpoint (numeric sequence) removed - we persist commit position and processed count instead.
+    public long? CommitPosition { get; set; }
+
+    public long ProcessedCount { get; set; }
+
+    // Optional reason describing why a checkpoint was taken (e.g. "batch-save", "manual-replay", etc.)
+    public string? CheckpointReason { get; set; }
 }
 
 public sealed class ParkedEventEntity
@@ -57,6 +69,8 @@ public sealed class ParkedEventEntity
     public DateTimeOffset ParkedAt { get; set; }
 
     public int AttemptCount { get; set; }
+
+    public bool IsDeleted { get; set; }
 }
 
 public sealed class ReplaySessionEntity
@@ -68,4 +82,31 @@ public sealed class ReplaySessionEntity
     public DateTimeOffset StartedAt { get; set; }
 
     public DateTimeOffset? CompletedAt { get; set; }
+}
+
+public sealed class StreamEventCountEntity
+{
+    public string SecondaryIndexName { get; set; } = string.Empty;
+
+    public long TotalCount { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class DailyCommitPositionEntity
+{
+    public string SubscriptionId { get; set; } = string.Empty;
+
+    public string SecondaryIndexName { get; set; } = string.Empty;
+
+    public DateTime Date { get; set; }
+
+    public long? CommitPosition { get; set; }
+}
+
+public sealed class IndexScanStateEntity
+{
+    public string SecondaryIndexName { get; set; } = string.Empty;
+
+    public long? LastScannedCommitPosition { get; set; }
 }

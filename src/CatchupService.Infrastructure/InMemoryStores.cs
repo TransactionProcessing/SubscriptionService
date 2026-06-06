@@ -37,14 +37,19 @@ public sealed class InMemorySubscriptionConfigurationStore : ISubscriptionConfig
 
 public sealed class InMemoryCheckpointStore : ICheckpointStore
 {
-    private readonly ConcurrentDictionary<string, long> _checkpoints = new();
+    private readonly ConcurrentDictionary<string, long?> _commitPositions = new();
+    private readonly ConcurrentDictionary<string, long> _processedCounts = new();
 
-    public Task<long> GetCheckpointAsync(string subscriptionId, CancellationToken cancellationToken = default) =>
-        Task.FromResult(_checkpoints.TryGetValue(subscriptionId, out var checkpoint) ? checkpoint : 0L);
+    public Task<CheckpointState> GetCheckpointAsync(string subscriptionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new CheckpointState(
+            _commitPositions.TryGetValue(subscriptionId, out var commitPos) && commitPos.HasValue ? commitPos : 0L,
+            _processedCounts.TryGetValue(subscriptionId, out var pc) ? pc : 0L,
+            null));
 
-    public Task SaveCheckpointAsync(string subscriptionId, long checkpoint, CancellationToken cancellationToken = default)
+    public Task SaveCheckpointAsync(string subscriptionId, long? commitPosition, long processedCount, string? checkpointReason = null, CancellationToken cancellationToken = default)
     {
-        _checkpoints[subscriptionId] = checkpoint;
+        _commitPositions[subscriptionId] = commitPosition;
+        _processedCounts[subscriptionId] = processedCount;
         return Task.CompletedTask;
     }
 }
@@ -52,6 +57,7 @@ public sealed class InMemoryCheckpointStore : ICheckpointStore
 public sealed class InMemoryParkedEventStore : IParkedEventStore
 {
     private readonly ConcurrentDictionary<string, ConcurrentQueue<ParkedEvent>> _parkedEvents = new();
+    private readonly ConcurrentDictionary<Guid, bool> _deleted = new();
 
     public Task ParkAsync(ParkedEvent parkedEvent, CancellationToken cancellationToken = default)
     {
@@ -67,7 +73,39 @@ public sealed class InMemoryParkedEventStore : IParkedEventStore
             return Task.FromResult<IReadOnlyCollection<ParkedEvent>>(Array.Empty<ParkedEvent>());
         }
 
-        return Task.FromResult<IReadOnlyCollection<ParkedEvent>>(queue.ToArray());
+        var items = queue.ToArray().Where(x => !_deleted.ContainsKey(x.ParkedEventId)).ToArray();
+        return Task.FromResult<IReadOnlyCollection<ParkedEvent>>(items);
+    }
+
+    public Task RemoveParkedEventAsync(string subscriptionId, Guid parkedEventId, ISubscriptionConfigurationStore configurationStore, CancellationToken cancellationToken = default)
+    {
+        // Default to soft-delete when configuration is not available
+        var softDelete = true;
+        try
+        {
+            var subs = configurationStore.GetSubscriptionsAsync(cancellationToken).GetAwaiter().GetResult();
+            var subscription = subs.FirstOrDefault(x => string.Equals(x.SubscriptionId, subscriptionId, StringComparison.OrdinalIgnoreCase));
+            softDelete = subscription?.SoftDeleteParked ?? true;
+        }
+        catch
+        {
+            softDelete = true;
+        }
+
+        if (softDelete)
+        {
+            _deleted[parkedEventId] = true;
+            return Task.CompletedTask;
+        }
+
+        if (_parkedEvents.TryGetValue(subscriptionId, out var queue))
+        {
+            var items = queue.ToArray().Where(x => x.ParkedEventId != parkedEventId).ToArray();
+            var newQueue = new ConcurrentQueue<ParkedEvent>(items);
+            _parkedEvents[subscriptionId] = newQueue;
+        }
+
+        return Task.CompletedTask;
     }
 }
 
@@ -91,6 +129,15 @@ public sealed class InMemoryReplaySessionStore : IReplaySessionStore
 
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyCollection<ReplaySession>> GetActiveSessionsAsync(string subscriptionId, CancellationToken cancellationToken = default)
+    {
+        var activeSessions = _sessions.Values
+            .Where(x => x.SubscriptionId == subscriptionId && x.CompletedAt is null)
+            .ToArray();
+
+        return Task.FromResult<IReadOnlyCollection<ReplaySession>>(activeSessions);
+    }
 }
 
 public sealed class InMemorySubscriptionEventSource : ISubscriptionEventSource
@@ -107,15 +154,49 @@ public sealed class InMemorySubscriptionEventSource : ISubscriptionEventSource
 
     public async Task SubscribeAsync(
         SubscriptionDefinition subscription,
-        long afterSequenceNumber,
+        CheckpointState checkpoint,
         Func<SubscriptionEvent, CancellationToken, Task<bool>> eventAppeared,
         CancellationToken cancellationToken = default)
     {
-        if (_events.TryGetValue(subscription.SecondaryIndexName, out var events))
+        // If a specific secondary index is provided, subscribe to events for that index only.
+        var afterCommitPosition = checkpoint.CommitPosition;
+        var commitPosition = checkpoint.CommitPosition;
+
+        if (!string.IsNullOrWhiteSpace(subscription.SecondaryIndexName))
         {
-            var batch = events
-                .Where(x => x.SequenceNumber > afterSequenceNumber)
-                .OrderBy(x => x.SequenceNumber)
+            if (_events.TryGetValue(subscription.SecondaryIndexName, out var events))
+            {
+                var batch = events
+                    // events in-memory may not have commit positions in tests; filter by commit position when available
+                    .Where(x => (x.CommitPosition ?? long.MinValue) > (afterCommitPosition ?? long.MinValue))
+                    .OrderBy(x => x.CommitPosition ?? long.MinValue)
+                    .ToArray();
+
+                foreach (var @event in batch)
+                {
+                    if (!await eventAppeared(@event, cancellationToken))
+                    {
+                        return;
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Catch-up subscription to all secondary indexes: merge events across all buckets and order by sequence number.
+            var allEvents = new List<SubscriptionEvent>();
+            foreach (var kvp in _events)
+            {
+                var list = kvp.Value;
+                lock (list)
+                {
+                    allEvents.AddRange(list);
+                }
+            }
+
+            var batch = allEvents
+                .Where(x => (x.CommitPosition ?? long.MinValue) > (afterCommitPosition ?? long.MinValue))
+                .OrderBy(x => x.CommitPosition ?? long.MinValue)
                 .ToArray();
 
             foreach (var @event in batch)

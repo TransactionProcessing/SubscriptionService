@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\CatchupService.Application\CatchupService.Application.csproj" />
     <ProjectReference Include="..\..\src\CatchupService.Domain\CatchupService.Domain.csproj" />
     <ProjectReference Include="..\..\src\CatchupService.Infrastructure\CatchupService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\CatchupService.Worker\CatchupService.Worker.csproj" />
   </ItemGroup>
 
 </Project>

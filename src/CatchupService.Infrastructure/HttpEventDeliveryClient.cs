@@ -30,31 +30,16 @@ public sealed class HttpEventDeliveryClient(HttpClient httpClient) : IEventDeliv
 
     private static void AddHeaders(HttpRequestMessage request, SubscriptionDefinition subscription, SubscriptionEvent @event)
     {
+        request.Headers.TryAddWithoutValidation("eventType", @event.EventType);
+        request.Headers.TryAddWithoutValidation("eventHandlerType", subscription.Tag);
         request.Headers.TryAddWithoutValidation("X-Catchup-Subscription-Id", subscription.SubscriptionId);
-        request.Headers.TryAddWithoutValidation("X-Catchup-Secondary-Index", subscription.SecondaryIndexName);
-        request.Headers.TryAddWithoutValidation("X-Catchup-Tag", subscription.Tag);
-        request.Headers.TryAddWithoutValidation("X-Catchup-Event-Id", @event.EventId);
-        request.Headers.TryAddWithoutValidation("X-Catchup-Event-Type", @event.EventType);
-        request.Headers.TryAddWithoutValidation("X-Catchup-Stream-Name", @event.StreamName);
-        request.Headers.TryAddWithoutValidation("X-Catchup-Sequence-Number", @event.SequenceNumber.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        request.Headers.TryAddWithoutValidation("X-Catchup-Occurred-At", @event.OccurredAt.ToString("O"));
 
-        foreach (var (key, value) in @event.Metadata)
+        if (@event.Metadata is not null)
         {
-            var headerName = $"X-Catchup-Meta-{SanitizeHeaderToken(key)}";
-            request.Headers.TryAddWithoutValidation(headerName, value);
+            foreach (var kvp in @event.Metadata)
+            {
+                request.Headers.TryAddWithoutValidation($"X-Catchup-Meta-{kvp.Key}", kvp.Value);
+            }
         }
-    }
-
-    private static string SanitizeHeaderToken(string value)
-    {
-        Span<char> buffer = stackalloc char[value.Length];
-        var index = 0;
-        foreach (var character in value)
-        {
-            buffer[index++] = char.IsLetterOrDigit(character) ? character : '-';
-        }
-
-        return new string(buffer[..index]);
     }
 }

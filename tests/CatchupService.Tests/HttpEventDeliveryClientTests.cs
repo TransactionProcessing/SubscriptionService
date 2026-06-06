@@ -27,16 +27,16 @@ public sealed class HttpEventDeliveryClientTests
             "evt-1",
             subscription.SubscriptionId,
             subscription.SecondaryIndexName,
-            7,
             "orders-7",
             "created",
-            [1, 2, 3],
+            new byte[] { 1, 2, 3 },
             "application/json",
             new Dictionary<string, string>
             {
                 ["customer-id"] = "c-123"
             },
-            new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero));
+            new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero),
+            commitPosition: 7);
 
         var outcome = await deliveryClient.DeliverAsync(subscription, @event);
 

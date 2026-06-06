@@ -1,0 +1,172 @@
+{
+  "info": {
+    "name": "SubscriptionService API",
+    "_postman_id": "d0c1f2a4-0000-4000-8000-000000000000",
+    "description": "Postman collection for SubscriptionService management and status APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Status - List all",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions","status"]
+        }
+      }
+    },
+    {
+      "name": "Status - Get subscription",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/:subscriptionId/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions",":subscriptionId","status"]
+        }
+      }
+    },
+    {
+      "name": "Replay - Start replay",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/:subscriptionId/replay",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions",":subscriptionId","replay"]
+        }
+      }
+    },
+    {
+      "name": "Replay - Get status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/:subscriptionId/replay",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions",":subscriptionId","replay"]
+        }
+      }
+    },
+    {
+      "name": "Config - List all",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/config",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions","config"]
+        }
+      }
+    },
+    {
+      "name": "Config - Get",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/config/:subscriptionId",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions","config",":subscriptionId"]
+        }
+      }
+    },
+    {
+      "name": "Config - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"subscriptionId\": \"sub-1\",\n  \"secondaryIndexName\": \"index-1\",\n  \"endpointUrl\": \"https://example.test/subscriptions/sub-1\",\n  \"tag\": \"orders\",\n  \"timeout\": { \"requestTimeout\": \"00:00:05\" },\n  \"retry\": { \"maxAttempts\": 3, \"delay\": \"00:00:01\" },\n  \"checkpoint\": { \"batchSize\": 50 },\n  \"continueOnParked\": false,\n  \"authentication\": { \"scheme\": \"Bearer\", \"parameters\": { \"token\": \"abc\" } },\n  \"enabled\": true,\n  \"softDeleteParked\": true\n}" 
+        },
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/config",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions","config"]
+        }
+      }
+    },
+    {
+      "name": "Config - Update",
+      "request": {
+        "method": "PUT",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"subscriptionId\": \"sub-1\",\n  \"secondaryIndexName\": \"index-1\",\n  \"endpointUrl\": \"https://example.test/subscriptions/sub-1\",\n  \"tag\": \"orders\",\n  \"timeout\": { \"requestTimeout\": \"00:00:05\" },\n  \"retry\": { \"maxAttempts\": 5, \"delay\": \"00:00:02\" },\n  \"checkpoint\": { \"batchSize\": 100 },\n  \"continueOnParked\": true,\n  \"enabled\": false,\n  \"softDeleteParked\": false\n}" 
+        },
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/config/:subscriptionId",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions","config",":subscriptionId"]
+        }
+      }
+    },
+    {
+      "name": "Config - Delete",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/config/:subscriptionId",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions","config",":subscriptionId"]
+        }
+      }
+    },
+    {
+      "name": "Config - Enable",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/config/:subscriptionId/enable",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions","config",":subscriptionId","enable"]
+        }
+      }
+    },
+    {
+      "name": "Config - Disable",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/config/:subscriptionId/disable",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions","config",":subscriptionId","disable"]
+        }
+      }
+    },
+    {
+      "name": "Daily Positions - Query",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/subscriptions/config/:subscriptionId/daily-positions?secondaryIndexName=index-1&from=2026-06-01&to=2026-06-06",
+          "host": ["{{baseUrl}}"],
+          "path": ["subscriptions","config",":subscriptionId","daily-positions"],
+          "query": [
+            { "key": "secondaryIndexName", "value": "index-1" },
+            { "key": "from", "value": "2026-06-01" },
+            { "key": "to", "value": "2026-06-06" }
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ]
+}
