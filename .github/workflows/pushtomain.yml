@@ -1,4 +1,4 @@
-name: Pull Request
+name: Push to Main
 
 on:
   push:
