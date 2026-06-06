@@ -1,0 +1,51 @@
+name: Pull Request
+
+on:
+  push:
+    # branches to consider in the event; optional, defaults to all
+    branches:
+      - main
+
+jobs:
+  build:
+    name: "Publish Pre-Release Nugets and Docker"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+
+      - name: Restore Nuget Packages
+        run: dotnet restore CatchupService.sln
+
+      - name: Build Code
+        run: dotnet build CatchupService.sln --configuration Release --no-restore
+
+      - name: 'Get Previous tag'
+        id: get-latest-tag
+        uses: actions-ecosystem/action-get-latest-tag@v1
+        with:
+            semver_only: true
+
+      - name: 'Bump Version'
+        id: bump-semver
+        uses: actions-ecosystem/action-bump-semver@v1
+        with:
+          current_version: ${{ steps.get-latest-tag.outputs.tag }}
+          level: patch
+
+    - name: Publish Images to Docker Hub
+      run: |
+        docker build . --file src/CatchupService.Worker/Dockerfile --tag stuartferguson/subscriptionservice:master
+        docker login --username=${{ secrets.DOCKER_USERNAME }} --password=${{ secrets.DOCKER_PASSWORD }}
+        docker push stuartferguson/subscriptionservice:master
+
