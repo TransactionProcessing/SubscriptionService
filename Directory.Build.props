@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <DefaultItemExcludes>
+      $(DefaultItemExcludes);
+      $(MSBuildProjectDirectory)\artifacts\**;
+      $(MSBuildProjectDirectory)\.tmp-clean-build\**
+    </DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

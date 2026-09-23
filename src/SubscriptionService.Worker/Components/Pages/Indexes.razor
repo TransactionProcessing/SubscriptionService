@@ -1,0 +1,440 @@
+@page "/admin/indexes"
+
+<PageTitle>Index management</PageTitle>
+
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">EventStore</p>
+        <h1>Index management</h1>
+        <p class="muted">
+            Browse the indexes currently defined in EventStore, open one to inspect it, update it in place, or delete it directly from the grid.
+        </p>
+    </div>
+
+    <div class="hero-actions">
+        <a class="button button-secondary" href="/">Back to dashboard</a>
+        <a class="button button-primary" href="/admin/indexes/new">Create new index</a>
+        <button class="button button-secondary" @onclick="ReloadAsync" disabled="@_busy">
+            @(_busy ? "Refreshing..." : "Refresh")
+        </button>
+    </div>
+</section>
+
+@if (_loading)
+{
+    <section class="panel loading-panel">
+        <div class="skeleton-line w-45"></div>
+        <div class="skeleton-line w-80"></div>
+        <div class="skeleton-line w-60"></div>
+    </section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel alert-panel">
+        <p class="eyebrow">Unable to load</p>
+        <h2>We couldn’t reach EventStore right now.</h2>
+        <p class="muted">@_error</p>
+    </section>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_toast))
+    {
+        <section class="panel toast-panel">
+            <p class="eyebrow">Update</p>
+            <p>@_toast</p>
+        </section>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_builtInError))
+    {
+        <section class="panel inline-alert">
+            Built-in indexes are unavailable: @_builtInError
+        </section>
+    }
+
+    @if (_indexes.Count == 0)
+    {
+        <section class="panel empty-state">
+            <p class="eyebrow">No indexes</p>
+            <h2>No EventStore indexes were returned.</h2>
+            <p class="muted">Create a new index to get started, then come back here to browse it in the grid.</p>
+            <div class="hero-actions">
+                <a class="button button-primary" href="/admin/indexes/new">Create new index</a>
+                <button class="button button-secondary" @onclick="ReloadAsync" disabled="@_busy">Reload</button>
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="panel table-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">Indexes</p>
+                    <h2>Current EventStore indexes</h2>
+                </div>
+                <div class="panel-header-copy">
+                    <label class="filter-label" for="index-type-filter">Type</label>
+                    <select id="index-type-filter" class="input input-filter" value="@_typeFilter" @onchange="OnTypeFilterChanged">
+                        <option value="All">All</option>
+                        <option value="Category">Category</option>
+                        <option value="Event type">Event type</option>
+                        <option value="User-defined">User-defined</option>
+                    </select>
+                    <span>@FilteredIndexes.Count of @_indexes.Count shown</span>
+                </div>
+            </div>
+
+            <div class="table-scroll">
+                <table class="data-table index-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>State</th>
+                            <th>Summary</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (FilteredIndexes.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="muted">No indexes match the selected type.</td>
+                            </tr>
+                        }
+                        @foreach (var item in PagedIndexes)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="table-primary">
+                                        @if (item.IsReadOnly)
+                                        {
+                                            <span>@item.Name</span>
+                                        }
+                                        else
+                                        {
+                                            <a class="table-link" href="@($"/admin/indexes/{Uri.EscapeDataString(item.Name)}")">@item.Name</a>
+                                        }
+                                    </div>
+                                </td>
+                                <td>@item.Type</td>
+                                <td>
+                                    <span class="@EventStoreIndexPresentation.GetStateBadgeClass(item.State)">
+                                        <span class="state-icon" aria-hidden="true">@EventStoreIndexPresentation.GetStateIcon(item.State)</span>
+                                        <span>@item.StateOrDefault</span>
+                                    </span>
+                                </td>
+                                <td>
+                                    <p class="index-summary">@item.Summary</p>
+                                </td>
+                                <td>
+                                    @if (item.IsReadOnly)
+                                    {
+                                        <span class="muted">Read only</span>
+                                    }
+                                    else
+                                    {
+                                        <div class="index-card-actions">
+                                            <a class="button button-secondary" href="@($"/admin/indexes/{Uri.EscapeDataString(item.Name)}")">View</a>
+                                            <button class="button button-secondary" @onclick="() => UpdateIndexAsync(item.Name)" disabled="@_busy">
+                                                @(_pendingUpdateIndex == item.Name ? "Updating..." : "Update")
+                                            </button>
+                                            <button class="button button-danger" @onclick="() => DeleteIndexAsync(item.Name)" disabled="@_busy">
+                                                @(_pendingDeleteIndex == item.Name ? "Confirm delete" : "Delete")
+                                            </button>
+                                        </div>
+                                    }
+
+                                    @if (string.Equals(_pendingUpdateIndex, item.Name, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <div class="inline-alert index-update-note">
+                                            Updating will recreate @item.Name in EventStore using its current payload.
+                                        </div>
+                                    }
+
+                                    @if (string.Equals(_pendingDeleteIndex, item.Name, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <div class="inline-alert danger index-delete-warning">
+                                            Deleting will remove @item.Name from EventStore. Click “Confirm delete” again to proceed.
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination-bar">
+                <div class="panel-header-copy">
+                    <label class="filter-label" for="index-page-size">Page size</label>
+                    <select id="index-page-size" class="input input-filter" value="@_pageSize" @onchange="OnPageSizeChanged">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+                <div class="pagination-actions">
+                    <button class="button button-secondary" @onclick="PreviousPage" disabled="@(_currentPage <= 1)">Previous</button>
+                    <span>Page @_currentPage of @PageCount</span>
+                    <button class="button button-secondary" @onclick="NextPage" disabled="@(_currentPage >= PageCount)">Next</button>
+                </div>
+            </div>
+        </section>
+    }
+}
+
+@code {
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string? _toast;
+    private string? _pendingDeleteIndex;
+    private string? _pendingUpdateIndex;
+    private string? _builtInError;
+    private bool _builtInLoadStarted;
+    private string _typeFilter = "All";
+    private int _pageSize = 20;
+    private int _currentPage = 1;
+    private EventStoreIndexApiResponse? _response;
+    private IReadOnlyList<EventStoreIndexListItemViewModel> _indexes = Array.Empty<EventStoreIndexListItemViewModel>();
+
+    private IReadOnlyList<EventStoreIndexListItemViewModel> FilteredIndexes =>
+        string.Equals(_typeFilter, "All", StringComparison.OrdinalIgnoreCase)
+            ? _indexes
+            : _indexes.Where(x => string.Equals(x.Type, _typeFilter, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+    private int PageCount => Math.Max(1, (int)Math.Ceiling(FilteredIndexes.Count / (double)_pageSize));
+
+    private IReadOnlyList<EventStoreIndexListItemViewModel> PagedIndexes =>
+        FilteredIndexes.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToArray();
+
+    [Inject]
+    private IEventStoreIndexClient IndexClient { get; set; } = default!;
+
+    [Inject]
+    private IEventStoreBuiltInIndexClient BuiltInIndexClient { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _busy = true;
+        _error = null;
+        _builtInError = null;
+
+        try
+        {
+            _response = await GetUserIndexesWithTimeoutAsync();
+            _indexes = EventStoreIndexPresentation.ParseIndexList(_response.Content);
+            _toast = _response.HasContent
+                ? $"Loaded {_indexes.Count} index{(_indexes.Count == 1 ? string.Empty : "es")}."
+                : "No content returned.";
+            _pendingDeleteIndex = null;
+            _pendingUpdateIndex = null;
+            _currentPage = 1;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            _busy = false;
+        }
+
+        if (_error is null)
+        {
+            StartBuiltInIndexLoad();
+        }
+    }
+
+    private async Task<EventStoreIndexApiResponse> GetUserIndexesWithTimeoutAsync()
+    {
+        var userIndexesTask = IndexClient.GetAllAsync();
+        var completedTask = await Task.WhenAny(
+            userIndexesTask,
+            Task.Delay(TimeSpan.FromSeconds(5)));
+
+        if (completedTask != userIndexesTask)
+        {
+            throw new TimeoutException("The KurrentDB index endpoint did not respond within 5 seconds.");
+        }
+
+        return await userIndexesTask;
+    }
+
+    private void StartBuiltInIndexLoad()
+    {
+        if (_builtInLoadStarted)
+        {
+            return;
+        }
+
+        _builtInLoadStarted = true;
+        _ = Task.Run(LoadBuiltInIndexesInBackgroundAsync);
+    }
+
+    private void OnTypeFilterChanged(ChangeEventArgs args)
+    {
+        _typeFilter = args.Value?.ToString() ?? "All";
+        _currentPage = 1;
+    }
+
+    private void OnPageSizeChanged(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var pageSize) && pageSize is 10 or 20 or 50)
+        {
+            _pageSize = pageSize;
+            _currentPage = 1;
+        }
+    }
+
+    private void PreviousPage() => _currentPage = Math.Max(1, _currentPage - 1);
+
+    private void NextPage() => _currentPage = Math.Min(PageCount, _currentPage + 1);
+
+    private async Task LoadBuiltInIndexesInBackgroundAsync()
+    {
+        try
+        {
+            var builtInIndexesTask = LoadBuiltInIndexesAsync();
+            var completedTask = await Task.WhenAny(
+                builtInIndexesTask,
+                Task.Delay(TimeSpan.FromSeconds(5)));
+
+            if (completedTask != builtInIndexesTask)
+            {
+                _builtInError = "The KurrentDB SQL endpoint did not respond within 5 seconds.";
+                return;
+            }
+
+            var builtInIndexes = await builtInIndexesTask;
+            _indexes = EventStoreIndexPresentation.CombineIndexLists(
+                EventStoreIndexPresentation.ParseIndexList(_response?.Content),
+                builtInIndexes);
+            _toast = $"Loaded {_indexes.Count} index{(_indexes.Count == 1 ? string.Empty : "es")}.";
+        }
+        catch (BuiltInIndexLoadException ex)
+        {
+            _builtInError = ex.InnerException?.Message ?? ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _builtInError = ex.Message;
+        }
+        finally
+        {
+            try
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (InvalidOperationException)
+            {
+                // The component may have been disposed while the background query completed.
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<EventStoreIndexListItemViewModel>> LoadBuiltInIndexesAsync()
+    {
+        try
+        {
+            var categoriesTask = BuiltInIndexClient.GetCategoriesAsync();
+            var eventTypesTask = BuiltInIndexClient.GetEventTypesAsync();
+            await Task.WhenAll(categoriesTask, eventTypesTask);
+
+            var categories = categoriesTask.Result.Select(category =>
+                EventStoreIndexPresentation.CreateBuiltInIndex($"$idx-ce-{category}", "Category"));
+            var eventTypes = eventTypesTask.Result.Select(eventType =>
+                EventStoreIndexPresentation.CreateBuiltInIndex($"$idx-et-{eventType}", "Event type"));
+
+            return categories.Concat(eventTypes).ToArray();
+        }
+        catch (Exception ex)
+        {
+            throw new BuiltInIndexLoadException(ex);
+        }
+    }
+
+    private sealed class BuiltInIndexLoadException(Exception innerException) : Exception(
+        "Built-in indexes could not be loaded.", innerException);
+
+    private async Task DeleteIndexAsync(string indexName)
+    {
+        if (string.IsNullOrWhiteSpace(indexName))
+        {
+            return;
+        }
+
+        if (!string.Equals(_pendingDeleteIndex, indexName, StringComparison.OrdinalIgnoreCase))
+        {
+            _pendingDeleteIndex = indexName;
+            _toast = $"Ready to delete {indexName}. Click delete again to confirm.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            _response = await IndexClient.DeleteAsync(indexName);
+            _toast = $"Deleted {indexName}.";
+            _pendingDeleteIndex = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task UpdateIndexAsync(string indexName)
+    {
+        if (string.IsNullOrWhiteSpace(indexName))
+        {
+            return;
+        }
+
+        if (!string.Equals(_pendingUpdateIndex, indexName, StringComparison.OrdinalIgnoreCase))
+        {
+            _pendingUpdateIndex = indexName;
+            _toast = $"Ready to update {indexName}. Click update again to proceed.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var details = await IndexClient.GetAsync(indexName);
+            if (string.IsNullOrWhiteSpace(details.Content))
+            {
+                _error = $"EventStore did not return a payload for {indexName}, so it cannot be recreated.";
+                return;
+            }
+
+            _response = await IndexClient.UpdateAsync(indexName, details.Content);
+            _toast = $"Updated {indexName}.";
+            _pendingUpdateIndex = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+}

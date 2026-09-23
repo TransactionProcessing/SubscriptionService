@@ -1,0 +1,526 @@
+@page "/admin/subscriptions/{SubscriptionId}"
+@implements IAsyncDisposable
+
+<PageTitle>@(Details?.Subscription.SubscriptionId ?? SubscriptionId)</PageTitle>
+
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">Subscription</p>
+        <h1>@(Details?.Subscription.SubscriptionId ?? SubscriptionId)</h1>
+        <p class="muted">
+            @(Details?.Subscription.Tag ?? "Loading subscription details...")
+        </p>
+    </div>
+
+    <div class="hero-actions">
+        <a class="button button-secondary" href="/">Back to dashboard</a>
+        @if (Details is not null)
+        {
+            <a class="button button-secondary" href="@($"/admin/subscriptions/{Details.Subscription.SubscriptionId}/edit")">Edit</a>
+            <button class="button button-secondary" @onclick="ToggleStateAsync" disabled="@_busy">
+                @(Details.Subscription.Enabled && Details.Subscription.OperationalState == SubscriptionOperationalState.Healthy ? "Stop" : "Start")
+            </button>
+            <button class="button button-secondary" @onclick="BackfillDailyCommitsAsync" disabled="@_busy">Backfill daily commits</button>
+            <button type="button" class="button button-primary" @onclick="ReplayAsync" disabled="@_busy">Replay now</button>
+        }
+    </div>
+</section>
+
+@if (_loading)
+{
+    <section class="panel loading-panel">
+        <div class="skeleton-line w-50"></div>
+        <div class="skeleton-line w-80"></div>
+        <div class="skeleton-line w-65"></div>
+    </section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel alert-panel">
+        <p class="eyebrow">Not found</p>
+        <h2>We couldn’t locate that subscription.</h2>
+        <p class="muted">@_error</p>
+    </section>
+}
+else if (Details is not null)
+{
+    <section class="stats-grid three-up">
+        <article class="stat-card panel">
+            <span class="stat-label">Health</span>
+            <strong class="@GetHealthClass(Details.Status?.Health)">@DisplayValue(Details.Status?.Health)</strong>
+            <span class="stat-foot">Running: @(Details.Status?.IsRunning == true ? "yes" : "no")</span>
+            @if (!string.IsNullOrWhiteSpace(Details.Status?.RuntimeFailureReason))
+            {
+                <span class="stat-foot">Worker error: @Details.Status!.RuntimeFailureReason</span>
+                <span class="stat-foot">Observed: @DisplayDate(Details.Status.RuntimeFailureAt)</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(Details.Status?.OperationalReason))
+            {
+                <span class="stat-foot">@Details.Status!.OperationalReason</span>
+            }
+        </article>
+        <article class="stat-card panel">
+            <span class="stat-label">Progress</span>
+            <strong>@(Details.Status?.ProgressDisplay ?? "n/a")</strong>
+            <span class="stat-foot">Commit @DisplayValue(Details.Status?.CommitPosition)</span>
+        </article>
+        <article class="stat-card panel">
+            <span class="stat-label">Parked events</span>
+            <strong>@(Details.Status?.ParkedEventCount ?? 0)</strong>
+            <span class="stat-foot">Latest @DisplayDate(Details.Status?.LatestParkedAt)</span>
+        </article>
+    </section>
+
+    <section class="panel detail-grid">
+        <div class="detail-card last-delivery-card">
+            <p class="eyebrow">Last delivery</p>
+            @if (_lastDeliverySnapshot is null)
+            {
+                <h2>No delivery activity yet</h2>
+                <p class="muted">Once the worker sends an event, the latest delivery attempt will appear here.</p>
+            }
+            else
+            {
+                <h2>@_lastDeliverySnapshot.EventType</h2>
+                <p class="muted">@_lastDeliverySnapshot.StreamName</p>
+                <p class="muted">Event: @_lastDeliverySnapshot.EventId</p>
+                <p class="muted">Sent: @DisplayDate(_lastDeliverySnapshot.DeliveredAt)</p>
+                <p class="muted">Status: @_lastDeliverySnapshot.Status</p>
+                @if (!string.IsNullOrWhiteSpace(_lastDeliverySnapshot.FailureReason))
+                {
+                    <p class="muted">Reason: @_lastDeliverySnapshot.FailureReason</p>
+                }
+            }
+        </div>
+    </section>
+
+    <section class="panel detail-grid">
+        <div class="detail-card">
+            <p class="eyebrow">Delivery target</p>
+            <h2>@Details.Subscription.EndpointUrl</h2>
+            <p class="muted">Tag: @Details.Subscription.Tag</p>
+        </div>
+        <div class="detail-card">
+            <p class="eyebrow">Index</p>
+            <h2>@(string.IsNullOrWhiteSpace(Details.Subscription.SecondaryIndexName) ? "All streams" : Details.Subscription.SecondaryIndexName)</h2>
+            <p class="muted">Enabled: @(Details.Subscription.Enabled ? "Yes" : "No")</p>
+            <p class="muted">State: @Details.Subscription.OperationalState</p>
+        </div>
+        <div class="detail-card">
+            <p class="eyebrow">Replay</p>
+            <h2>@(Details.ReplayStatus?.HasActiveReplaySession == true ? "Active" : "Idle")</h2>
+            <p class="muted">@((Details.ReplayStatus?.ActiveReplaySessionCount ?? 0).ToString(CultureInfo.InvariantCulture)) active sessions</p>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">Checkpoint</p>
+                <h2>Subscription checkpoint</h2>
+                <p class="muted">Sourced from <code>SubscriptionCheckpoints</code>.</p>
+            </div>
+        </div>
+
+        @if (Details.Checkpoint.CommitPosition is null && Details.Checkpoint.ProcessedCount == 0 && string.IsNullOrWhiteSpace(Details.Checkpoint.CheckpointReason))
+        {
+            <div class="empty-state compact">
+                <h3>No checkpoint recorded yet.</h3>
+                <p class="muted">The subscription has not persisted a checkpoint row yet.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Commit position</th>
+                            <th>Processed count</th>
+                            <th>Checkpoint reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>@DisplayValue(Details.Checkpoint.CommitPosition)</td>
+                            <td>@Details.Checkpoint.ProcessedCount.ToString(CultureInfo.InvariantCulture)</td>
+                            <td>@(string.IsNullOrWhiteSpace(Details.Checkpoint.CheckpointReason) ? "n/a" : Details.Checkpoint.CheckpointReason)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">Daily positions</p>
+                <h2>Replay checkpoints</h2>
+                <p class="muted">Useful for parked-queue replay and secondary index scanning.</p>
+            </div>
+            <div class="filter-row">
+                <label class="field compact-field">
+                    <span>From</span>
+                    <input type="date" class="input" @bind="_fromDate" />
+                </label>
+                <label class="field compact-field">
+                    <span>To</span>
+                    <input type="date" class="input" @bind="_toDate" />
+                </label>
+                <button class="button button-secondary" @onclick="ApplyFiltersAsync" disabled="@_busy">Apply</button>
+            </div>
+        </div>
+
+        @if (Details.DailyPositions.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No daily positions in this range.</h3>
+                <p class="muted">Adjust the dates to inspect older replay checkpoints.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Secondary index</th>
+                            <th>Commit position</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Details.DailyPositions)
+                        {
+                            <tr>
+                                <td>@row.Date.ToString("dd MMM yyyy", CultureInfo.CurrentCulture)</td>
+                                <td>@row.SecondaryIndexName</td>
+                                <td>@DisplayValue(row.CommitPosition)</td>
+                                <td>
+                                    @if (row.CommitPosition is long commitPosition)
+                                    {
+                                        <button type="button" class="button button-secondary" @onclick="() => ReplayFromCheckpointAsync(commitPosition)" disabled="@_busy">Replay from here</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">Parked events</p>
+                <h2>Recent failures</h2>
+            </div>
+        </div>
+
+        @if (Details.ParkedEvents.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No parked events.</h3>
+                <p class="muted">This subscription is currently clear.</p>
+            </div>
+        }
+        else
+        {
+            <div class="card-stack">
+                @foreach (var parkedEvent in Details.ParkedEvents.OrderByDescending(x => x.ParkedAt))
+                {
+                    <article class="parked-card">
+                        <div class="parked-header">
+                            <div>
+                                <strong>@parkedEvent.EventId</strong>
+                                <div class="muted small">@parkedEvent.StreamName · @parkedEvent.EventType</div>
+                            </div>
+                            <div class="muted small">@DisplayDate(parkedEvent.ParkedAt)</div>
+                        </div>
+                        <p class="failure-reason">@parkedEvent.FailureReason</p>
+                        <div class="badge-row">
+                            <span class="badge badge-muted">Attempts: @parkedEvent.AttemptCount</span>
+                            <span class="badge badge-info">@parkedEvent.ContentType</span>
+                            <span class="badge badge-success">@DisplayDate(parkedEvent.OccurredAt)</span>
+                        </div>
+                        <pre class="payload-preview">@SubscriptionAdminService.FormatPreview(parkedEvent.Payload)</pre>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(_toast))
+    {
+        <section class="panel toast-panel">
+            <p class="eyebrow">Update</p>
+            <p>@_toast</p>
+        </section>
+    }
+}
+
+@code {
+    [Parameter]
+    public string SubscriptionId { get; set; } = string.Empty;
+
+    [Inject]
+    private SubscriptionAdminService Admin { get; set; } = default!;
+
+    private SubscriptionDetailViewModel? Details;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string? _toast;
+    private SubscriptionDeliverySnapshot? _lastDeliverySnapshot;
+    private CancellationTokenSource? _snapshotRefreshCts;
+    private Task? _snapshotRefreshTask;
+    private DateOnly _fromDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30).Date);
+    private DateOnly _toDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        await StopSnapshotRefreshAsync();
+
+        try
+        {
+            var (fromDate, toDate) = ParseRange();
+            Details = await Admin.GetDetailAsync(SubscriptionId, fromDate, toDate);
+            if (Details is null)
+            {
+                _error = "The subscription was not found.";
+            }
+            else
+            {
+                _fromDate = DateOnly.FromDateTime(Details.FromDate);
+                _toDate = DateOnly.FromDateTime(Details.ToDate);
+                _lastDeliverySnapshot = await Admin.GetLatestDeliverySnapshotAsync(SubscriptionId);
+                StartSnapshotRefreshLoop(SubscriptionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var (fromDate, toDate) = ParseRange();
+            Details = await Admin.GetDetailAsync(SubscriptionId, fromDate, toDate);
+            if (Details is null)
+            {
+                _error = "The subscription was not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReplayAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Admin.ReplayAsync(SubscriptionId);
+            _toast = result.Message;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _toast = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task BackfillDailyCommitsAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Admin.BackfillDailyCommitsAsync(SubscriptionId);
+            _toast = result.Message;
+        }
+        catch (Exception ex)
+        {
+            _toast = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReplayFromCheckpointAsync(long commitPosition)
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Admin.ReplayFromCheckpointAsync(SubscriptionId, commitPosition);
+            _toast = result.Message;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _toast = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void StartSnapshotRefreshLoop(string subscriptionId)
+    {
+        _snapshotRefreshCts = new CancellationTokenSource();
+        var cancellationToken = _snapshotRefreshCts.Token;
+
+        _snapshotRefreshTask = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                try
+                {
+                    var snapshot = await Admin.GetLatestDeliverySnapshotAsync(subscriptionId, cancellationToken);
+                    await InvokeAsync(() =>
+                    {
+                        _lastDeliverySnapshot = snapshot;
+                        StateHasChanged();
+                    });
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch
+                {
+                    // Keep trying; a later poll may succeed.
+                }
+            }
+        }, cancellationToken);
+    }
+
+    private async Task ToggleStateAsync()
+    {
+        if (_busy || Details is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var running = Details.Subscription.Enabled && Details.Subscription.OperationalState == SubscriptionOperationalState.Healthy;
+            var updated = running
+                ? await Admin.StopAsync(Details.Subscription.SubscriptionId)
+                : await Admin.StartAsync(Details.Subscription.SubscriptionId);
+            _toast = updated
+                ? $"{Details.Subscription.SubscriptionId} is now {(running ? "stopped" : "started")}."
+                : "The subscription was not found.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _toast = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private (DateTime From, DateTime To) ParseRange()
+    {
+        return (_fromDate.ToDateTime(TimeOnly.MinValue), _toDate.ToDateTime(TimeOnly.MinValue));
+    }
+
+    private static string GetHealthClass(string? health) => (health ?? string.Empty).ToLowerInvariant() switch
+    {
+        "healthy" => "badge badge-success",
+        "replaying" => "badge badge-warning",
+        "stopped" => "badge badge-muted",
+        "faulted" => "badge badge-danger",
+        _ => "badge badge-info"
+    };
+
+    private static string DisplayValue(string? value) => string.IsNullOrWhiteSpace(value) ? "n/a" : value;
+
+    private static string DisplayValue(long? value) => value.HasValue ? value.Value.ToString("N0", CultureInfo.InvariantCulture) : "n/a";
+
+    private static string DisplayDate(DateTimeOffset? value) => value is null
+        ? "n/a"
+        : value.Value.ToLocalTime().ToString("dd MMM yyyy HH:mm", CultureInfo.CurrentCulture);
+
+    private async Task StopSnapshotRefreshAsync()
+    {
+        if (_snapshotRefreshCts is null)
+        {
+            return;
+        }
+
+        _snapshotRefreshCts.Cancel();
+
+        try
+        {
+            if (_snapshotRefreshTask is not null)
+            {
+                await _snapshotRefreshTask;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _snapshotRefreshCts.Dispose();
+            _snapshotRefreshCts = null;
+            _snapshotRefreshTask = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await StopSnapshotRefreshAsync();
+}

@@ -1,0 +1,117 @@
+@page "/configuration"
+
+@using Microsoft.Extensions.Configuration
+@using Microsoft.Extensions.Hosting
+
+<PageTitle>Configuration</PageTitle>
+
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">Runtime settings</p>
+        <h1>Configuration</h1>
+        <p class="muted">
+            Read-only view of the settings used by the application after appsettings.development.json overrides appsettings.json.
+        </p>
+    </div>
+</section>
+
+<section class="panel table-panel">
+    <div class="panel-header">
+        <div>
+            <p class="eyebrow">Applied values</p>
+            <h2>Current configuration</h2>
+        </div>
+        <div class="panel-header-copy">
+            <span>@_settings.Count effective setting@(_settings.Count == 1 ? string.Empty : "s")</span>
+        </div>
+    </div>
+
+    <div class="inline-alert">
+        Values are displayed using the same file precedence as the application. Password values are masked for safety.
+    </div>
+
+    <div class="table-scroll">
+        <table class="data-table configuration-table">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Setting</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var setting in _settings)
+                {
+                    <tr>
+                        <td><span class="badge badge-muted">@setting.Source</span></td>
+                        <td><span class="mono configuration-key">@setting.Key</span></td>
+                        <td><span class="mono configuration-value">@setting.Value</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@code {
+    [Inject]
+    private IWebHostEnvironment HostEnvironment { get; set; } = default!;
+
+    private List<ConfigurationEntry> _settings = [];
+
+    protected override void OnInitialized()
+    {
+        var baseConfiguration = LoadJsonFile("appsettings.json");
+        var developmentConfiguration = LoadJsonFile("appsettings.development.json");
+        var keys = baseConfiguration.AsEnumerable()
+            .Concat(developmentConfiguration.AsEnumerable())
+            .Where(setting => !string.IsNullOrWhiteSpace(setting.Value))
+            .Select(setting => setting.Key)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        _settings = keys
+            .Select(key =>
+            {
+                var developmentValue = developmentConfiguration[key];
+                var baseValue = baseConfiguration[key];
+                var value = developmentValue ?? baseValue;
+                var source = developmentValue is not null
+                    ? "appsettings.development.json"
+                    : "appsettings.json";
+
+                return new ConfigurationEntry(source, key, MaskSensitiveValue(key, value ?? string.Empty));
+            })
+            .Where(setting => !string.IsNullOrWhiteSpace(setting.Value))
+            .OrderBy(setting => setting.Key, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(setting => setting.Source, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private IConfigurationRoot LoadJsonFile(string fileName)
+    {
+        return new ConfigurationBuilder()
+            .SetBasePath(HostEnvironment.ContentRootPath)
+            .AddJsonFile(fileName, optional: true)
+            .Build();
+    }
+
+    private static string MaskSensitiveValue(string key, string value)
+    {
+        if (key.Contains("password", StringComparison.OrdinalIgnoreCase))
+        {
+            return "•••••••• (masked)";
+        }
+
+        if (!key.StartsWith("ConnectionStrings:", StringComparison.OrdinalIgnoreCase))
+        {
+            return value;
+        }
+
+        return string.Join(';', value.Split(';').Select(part =>
+            part.TrimStart().StartsWith("Password=", StringComparison.OrdinalIgnoreCase)
+                ? part[..(part.IndexOf('=') + 1)] + "•••••••• (masked)"
+                : part));
+    }
+
+    private sealed record ConfigurationEntry(string Source, string Key, string Value);
+}

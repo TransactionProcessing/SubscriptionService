@@ -1,0 +1,18 @@
+@rendermode @(new InteractiveServerRenderMode())
+
+<Router AppAssembly="@typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <section class="empty-state panel">
+                <p class="eyebrow">Not found</p>
+                <h1>This page could not be located.</h1>
+                <p class="muted">The link may be stale or the path may not exist yet.</p>
+                <a class="button button-primary" href="/">Back to dashboard</a>
+            </section>
+        </LayoutView>
+    </NotFound>
+</Router>

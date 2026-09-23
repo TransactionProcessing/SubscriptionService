@@ -1,0 +1,122 @@
+@page "/admin/indexes/new"
+
+<PageTitle>Create index</PageTitle>
+
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">EventStore</p>
+        <h1>Create index</h1>
+        <p class="muted">
+            Define a new index and send the JSON payload directly to EventStore.
+        </p>
+    </div>
+
+    <div class="hero-actions">
+        <a class="button button-secondary" href="/admin/indexes">Back to indexes</a>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel alert-panel">
+        <p class="eyebrow">Unable to save</p>
+        <h2>We hit a problem while creating the index.</h2>
+        <p class="muted">@_error</p>
+    </section>
+}
+
+<section class="form-card panel">
+    @if (!string.IsNullOrWhiteSpace(_formError))
+    {
+        <div class="inline-alert">@_formError</div>
+    }
+
+    <div class="form-grid">
+        <section class="form-section">
+            <div class="panel-header compact">
+                <div>
+                    <p class="eyebrow">Identity</p>
+                    <h2>Index details</h2>
+                </div>
+            </div>
+
+            <label class="field">
+                <span>Index name</span>
+                <input class="input" value="@_indexName" @oninput="OnIndexNameInput" />
+            </label>
+        </section>
+
+        <section class="form-section full-width">
+            <div class="panel-header compact">
+                <div>
+                    <p class="eyebrow">Payload</p>
+                    <h2>Payload JSON</h2>
+                </div>
+            </div>
+
+            <label class="field">
+                <span>Payload JSON</span>
+                <textarea class="input textarea mono editor-large" @value="_payloadJson" @oninput="OnPayloadInput"></textarea>
+                <small class="field-help">This body is posted directly to EventStore when the index is created.</small>
+            </label>
+        </section>
+    </div>
+
+    <div class="form-actions">
+        <button type="button" class="button button-primary" @onclick="CreateAsync" disabled="@_saving">
+            @(_saving ? "Creating..." : "Create index")
+        </button>
+        <a class="button button-secondary" href="/admin/indexes">Cancel</a>
+    </div>
+</section>
+
+@code {
+    private string _indexName = string.Empty;
+    private string _payloadJson = string.Empty;
+    private bool _saving;
+    private string? _error;
+    private string? _formError;
+
+    [Inject]
+    private IEventStoreIndexClient IndexClient { get; set; } = default!;
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    private void OnIndexNameInput(ChangeEventArgs e) => _indexName = e.Value?.ToString() ?? string.Empty;
+
+    private void OnPayloadInput(ChangeEventArgs e) => _payloadJson = e.Value?.ToString() ?? string.Empty;
+
+    private async Task CreateAsync()
+    {
+        _saving = true;
+        _formError = null;
+
+        try
+        {
+            var indexName = _indexName.Trim();
+            if (string.IsNullOrWhiteSpace(indexName))
+            {
+                _formError = "Please provide an index name.";
+                return;
+            }
+
+            var response = await IndexClient.CreateAsync(indexName, _payloadJson);
+            if ((int)response.StatusCode is >= 200 and < 300)
+            {
+                Navigation.NavigateTo($"/admin/indexes/{Uri.EscapeDataString(indexName)}");
+                return;
+            }
+
+            _formError = $"EventStore returned {(int)response.StatusCode} {response.StatusCode}.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

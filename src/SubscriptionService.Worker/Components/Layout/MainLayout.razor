@@ -1,0 +1,21 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <header class="app-header">
+        <div class="brand-lockup">
+            <div class="brand-mark">CS</div>
+            <div>
+                <div class="brand-name">Catchup Service</div>
+                <div class="brand-subtitle">Subscription control plane</div>
+            </div>
+        </div>
+
+        <NavMenu />
+    </header>
+
+    <main class="main-panel">
+        <div class="main-panel-inner">
+            @Body
+        </div>
+    </main>
+</div>

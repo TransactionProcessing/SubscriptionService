@@ -1,0 +1,197 @@
+@page "/admin/indexes/{IndexName}"
+@using System.Text.Json
+
+<PageTitle>@(IndexName ?? "Index details")</PageTitle>
+
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">EventStore</p>
+        <h1>@(string.IsNullOrWhiteSpace(IndexName) ? "Index details" : IndexName)</h1>
+        <p class="muted">
+            Inspect the raw EventStore response for this index.
+        </p>
+    </div>
+
+    <div class="hero-actions">
+        <a class="button button-secondary" href="/admin/indexes">Back to indexes</a>
+        <button type="button" class="button button-secondary" @onclick="UpdateAsync" disabled="@(!_canUpdate || _updating)">
+            @(_updating ? "Updating..." : "Update index")
+        </button>
+        <a class="button button-primary" href="/admin/indexes/new">Create new index</a>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(_operationMessage))
+{
+    <section class="inline-alert @_operationClass">
+        @_operationMessage
+    </section>
+}
+
+@if (_loading)
+{
+    <section class="panel loading-panel">
+        <div class="skeleton-line w-45"></div>
+        <div class="skeleton-line w-80"></div>
+        <div class="skeleton-line w-60"></div>
+    </section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel alert-panel">
+        <p class="eyebrow">Not found</p>
+        <h2>We couldn’t load that index.</h2>
+        <p class="muted">@_error</p>
+    </section>
+}
+else if (_response is not null)
+{
+    <section class="stats-grid three-up">
+        <article class="stat-card panel">
+            <span class="stat-label">Status</span>
+            <strong>
+                <span class="@EventStoreIndexPresentation.GetStateBadgeClass(_state) status-with-icon">
+                    <span aria-hidden="true" class="state-icon">@EventStoreIndexPresentation.GetStateIcon(_state)</span>
+                    <span>@DisplayStatus()</span>
+                </span>
+            </strong>
+            <span class="stat-foot">@(_response.ContentType ?? "No content type")</span>
+        </article>
+        <article class="stat-card panel">
+            <span class="stat-label">Summary</span>
+            <strong>@_summaryTitle</strong>
+            <span class="stat-foot">@_summaryBody</span>
+        </article>
+        <article class="stat-card panel">
+            <span class="stat-label">Index</span>
+            <strong>@IndexName</strong>
+            <span class="stat-foot">Opened from the grid</span>
+        </article>
+    </section>
+
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">Response</p>
+                <h2>Raw EventStore payload</h2>
+            </div>
+        </div>
+
+        @if (string.IsNullOrWhiteSpace(_response.Content))
+        {
+            <p class="muted">This response did not include a body.</p>
+        }
+        else
+        {
+            <pre class="json-response">@EventStoreIndexPresentation.FormatJson(_response.Content)</pre>
+        }
+    </section>
+}
+
+@code {
+    [Parameter]
+    public string IndexName { get; set; } = string.Empty;
+
+    [Inject]
+    private IEventStoreIndexClient IndexClient { get; set; } = default!;
+
+    private bool _loading = true;
+    private string? _error;
+    private EventStoreIndexApiResponse? _response;
+    private string? _state;
+    private string _summaryTitle = "Waiting";
+    private string _summaryBody = "Loading index details...";
+    private bool _updating;
+    private string? _operationMessage;
+    private string _operationClass = string.Empty;
+
+    private bool _canUpdate => _response is not null && !string.IsNullOrWhiteSpace(_response.Content);
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task<bool> LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _operationMessage = null;
+        _operationClass = string.Empty;
+
+        try
+        {
+            _response = await IndexClient.GetAsync(IndexName);
+            _state = EventStoreIndexPresentation.GetPrimaryState(_response.Content);
+            if (string.IsNullOrWhiteSpace(_response.Content))
+            {
+                _summaryTitle = "No body";
+                _summaryBody = "EventStore returned the status only.";
+            }
+            else
+            {
+                _summaryTitle = EventStoreIndexPresentation.GetResponseSummary(_response.Content);
+                _summaryBody = "Opened from the grid view.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        return string.IsNullOrWhiteSpace(_error);
+    }
+
+    private async Task UpdateAsync()
+    {
+        if (_response is null || string.IsNullOrWhiteSpace(_response.Content))
+        {
+            _operationMessage = "This index does not have a payload to reapply.";
+            _operationClass = "danger";
+            return;
+        }
+
+        _updating = true;
+        _operationMessage = null;
+        _operationClass = string.Empty;
+
+        try
+        {
+            var indexName = IndexName.Trim();
+            if (string.IsNullOrWhiteSpace(indexName))
+            {
+                _operationMessage = "The index name is missing.";
+                _operationClass = "danger";
+                return;
+            }
+
+            var response = await IndexClient.UpdateAsync(indexName, _response.Content);
+            if ((int)response.StatusCode is >= 200 and < 300)
+            {
+                var refreshed = await LoadAsync();
+                _operationMessage = refreshed
+                    ? "The index was updated by recreating it in EventStore."
+                    : "The index was recreated, but refreshing the page data failed.";
+                _operationClass = refreshed ? string.Empty : "danger";
+                return;
+            }
+
+            _operationMessage = $"EventStore returned {(int)response.StatusCode} {response.StatusCode} while updating the index.";
+            _operationClass = "danger";
+        }
+        catch (Exception ex)
+        {
+            _operationMessage = ex.Message;
+            _operationClass = "danger";
+        }
+        finally
+        {
+            _updating = false;
+        }
+    }
+
+    private string DisplayStatus() => string.IsNullOrWhiteSpace(_state)
+        ? (_response is null ? "No request" : $"{(int)_response.StatusCode} {_response.StatusCode}")
+        : _state!;
+}

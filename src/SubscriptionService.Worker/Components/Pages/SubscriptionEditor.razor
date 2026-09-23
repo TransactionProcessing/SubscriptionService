@@ -1,0 +1,549 @@
+@page "/admin/subscriptions/new"
+@page "/admin/subscriptions/{SubscriptionId}/edit"
+<PageTitle>@PageHeading</PageTitle>
+
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">Configuration</p>
+        <h1>@PageHeading</h1>
+        <p class="muted">
+            Define the delivery endpoint, retry policy, secondary index naming, and event preview for a subscription.
+        </p>
+    </div>
+
+    <div class="hero-actions">
+        <a class="button button-secondary" href="/">Back to dashboard</a>
+    </div>
+</section>
+
+@if (_loading)
+{
+    <section class="panel loading-panel">
+        <div class="skeleton-line w-45"></div>
+        <div class="skeleton-line w-80"></div>
+        <div class="skeleton-line w-60"></div>
+    </section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel alert-panel">
+        <p class="eyebrow">Not found</p>
+        <h2>That subscription does not exist.</h2>
+        <p class="muted">@_error</p>
+        <a class="button button-primary" href="/">Go back</a>
+    </section>
+}
+else if (_model is not null)
+{
+    <EditForm Model="@_model" OnValidSubmit="SaveAsync" class="form-card panel">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        @if (!string.IsNullOrWhiteSpace(_formError))
+        {
+            <div class="inline-alert">@_formError</div>
+        }
+
+        <section class="form-section full-width generated-id-panel">
+            <div>
+                <p class="eyebrow">Generated subscription ID</p>
+                <div class="generated-subscription-id">@(string.IsNullOrWhiteSpace(_model.SubscriptionId) ? "Choose an index and endpoint" : _model.SubscriptionId)</div>
+                <small class="field-help">Built from the index name, endpoint name, and tag.</small>
+            </div>
+            <span class="badge @( _model.Enabled ? "badge-success" : "badge-muted")">@( _model.Enabled ? "Enabled" : "Disabled")</span>
+        </section>
+
+        <div class="form-grid subscription-editor-grid">
+            <section class="form-section">
+                <div class="panel-header compact">
+                    <div>
+                        <p class="eyebrow">Identity</p>
+                        <h2>Subscription details</h2>
+                    </div>
+                </div>
+
+                <div class="source-fields">
+                <label class="field">
+                    <span>Secondary index</span>
+                    <InputSelect TValue="string" class="input mono"
+                                 Value="_model.SecondaryIndexName"
+                                 ValueChanged="OnSecondaryIndexChanged"
+                                 ValueExpression="() => _model.SecondaryIndexName">
+                        <option value="">Select an index</option>
+                        @foreach (var item in _indexOptions)
+                        {
+                            <option value="@item.Name">@($"{item.Name} · {item.Type}")</option>
+                        }
+                    </InputSelect>
+                    <small class="field-help">Select a built-in or user-defined EventStore index.</small>
+                    @if (!string.IsNullOrWhiteSpace(_indexOptionsError))
+                    {
+                        <div class="inline-alert danger">@_indexOptionsError</div>
+                    }
+                    else if (_indexOptions.Count == 0)
+                    {
+                        <small class="field-help">No indexes are currently available.</small>
+                    }
+                </label>
+
+                <label class="field">
+                    <span>Delivery endpoint</span>
+                    <InputSelect TValue="int" class="input" Value="_model.EndpointId" ValueChanged="OnEndpointChanged" ValueExpression="() => _model.EndpointId">
+                        <option value="">Select an endpoint</option>
+                        @foreach (var endpoint in _endpointOptions)
+                        {
+                            <option value="@endpoint.EndpointId">@($"{endpoint.Name} · {endpoint.Url}")</option>
+                        }
+                    </InputSelect>
+                    <small class="field-help">Endpoints are managed separately and include URL and authentication.</small>
+                    @if (_endpointOptions.Count == 0)
+                    {
+                        <a class="button button-secondary" href="/admin/endpoints">Create an endpoint</a>
+                    }
+                </label>
+
+                <label class="field">
+                    <span>Tag</span>
+                    <InputText class="input" Value="@_model.Tag" ValueChanged="OnTagChanged" ValueExpression="() => _model.Tag" />
+                    <small class="field-help">Displayed in headers and used by your downstream handler.</small>
+                </label>
+                </div>
+            </section>
+
+            <section class="form-section full-width">
+                <div class="panel-header compact">
+                    <div>
+                        <p class="eyebrow">Delivery</p>
+                        <h2>Retry and checkpoint settings</h2>
+                    </div>
+                </div>
+
+                <div class="two-column">
+                    <label class="field">
+                        <span>Timeout seconds</span>
+                        <InputNumber class="input input-narrow" @bind-Value="_model.RequestTimeoutSeconds" />
+                    </label>
+                    <label class="field">
+                        <span>Max retry count</span>
+                        <InputNumber class="input input-narrow" @bind-Value="_model.RetryMaxAttempts" />
+                        <small class="field-help">0 means only the initial attempt. Higher values add retries after failures.</small>
+                    </label>
+                    <label class="field">
+                        <span>Retry delay seconds</span>
+                        <InputNumber class="input input-narrow" @bind-Value="_model.RetryDelaySeconds" />
+                    </label>
+                    <label class="field">
+                        <span>Checkpoint batch size</span>
+                        <InputNumber class="input input-narrow" @bind-Value="_model.CheckpointBatchSize" />
+                    </label>
+                </div>
+
+                <div class="switch-grid">
+                    <label class="switch">
+                        <InputCheckbox @bind-Value="_model.Enabled" />
+                        <span>
+                            <strong>Enabled</strong>
+                            <small class="field-help">Uncheck to keep the subscription configured but inactive.</small>
+                        </span>
+                    </label>
+                    <label class="switch">
+                        <InputCheckbox @bind-Value="_model.ContinueOnParked" />
+                        <span>
+                            <strong>Continue on parked</strong>
+                            <small class="field-help">Keep processing after a parked event is encountered.</small>
+                        </span>
+                    </label>
+                    <label class="switch">
+                        <InputCheckbox @bind-Value="_model.SoftDeleteParked" />
+                        <span>
+                            <strong>Soft delete parked</strong>
+                            <small class="field-help">Keep parked events for audit instead of removing them.</small>
+                        </span>
+                    </label>
+                    <label class="switch">
+                        <InputCheckbox @bind-Value="_model.EnableEventLogging" />
+                        <span>
+                            <strong>Enable event logging</strong>
+                            <small class="field-help">Record every delivery attempt, including retries and replays.</small>
+                        </span>
+                    </label>
+                </div>
+            </section>
+
+            <section class="form-section full-width">
+                <div class="panel-header compact">
+                    <div>
+                        <p class="eyebrow">Preview</p>
+                        <h2>Return the first matching events</h2>
+                    </div>
+                </div>
+
+                <div class="filter-row">
+                    <label class="field compact-field">
+                        <span>Preview count</span>
+                        <input class="input" min="1" type="number" value="@_previewCount" @onchange="OnPreviewCountChanged" />
+                        <small class="field-help">How many events to collect before the in-memory catch-up stops.</small>
+                    </label>
+
+                    <button type="button" class="button button-secondary" @onclick="PreviewAsync" disabled="@(_previewing || _model is null)">
+                        @(_previewing ? "Loading preview..." : $"Preview first {_previewCount} events")
+                    </button>
+                </div>
+
+                <p class="field-help">This preview runs an in-memory catch-up subscription and does not save anything.</p>
+
+                @if (!string.IsNullOrWhiteSpace(_previewError))
+                {
+                    <div class="inline-alert danger">@_previewError</div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_previewMessage))
+                {
+                    <div class="inline-alert">@_previewMessage</div>
+                }
+
+                @if (_previewError is null)
+                {
+                    @if (_previewEvents.Count == 0)
+                    {
+                        <p class="muted">@(_previewMessage is null ? "Run the preview to see matching events." : "No events were returned for this index.")</p>
+                    }
+                    else
+                    {
+                        <div class="card-stack">
+                            @foreach (var previewEvent in _previewEvents)
+                            {
+                                <article class="parked-card">
+                                    <div class="parked-header">
+                                        <div>
+                                            <strong>@previewEvent.EventId</strong>
+                                            <div class="muted small">@previewEvent.StreamName · @previewEvent.EventType</div>
+                                        </div>
+                                        <div class="muted small">@FormatOccurredAt(previewEvent.OccurredAt)</div>
+                                    </div>
+
+                                    <div class="badge-row">
+                                        <span class="badge badge-muted">Commit: @FormatCommitPosition(previewEvent.CommitPosition)</span>
+                                        <span class="badge badge-info">@previewEvent.ContentType</span>
+                                    </div>
+
+                                    <pre class="payload-preview">@SubscriptionAdminService.FormatPreview(previewEvent.Payload)</pre>
+                                </article>
+                            }
+                        </div>
+                    }
+                }
+            </section>
+
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="button button-primary" disabled="@_saving">
+                @(_saving ? "Saving..." : "Save subscription")
+            </button>
+            <a class="button button-secondary" href="@BackLink">Cancel</a>
+        </div>
+
+        @if (!IsCreate)
+        {
+            <div class="form-actions">
+                <button type="button" class="button button-danger" @onclick="ToggleDeleteConfirm" disabled="@_saving">
+                    @(_deleteConfirm ? "Confirm delete" : "Delete")
+                </button>
+            </div>
+        }
+
+        @if (_deleteConfirm && !IsCreate)
+        {
+            <div class="inline-alert danger">
+                Deleting removes the subscription configuration. Click “Confirm delete” again to proceed.
+            </div>
+        }
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public string? SubscriptionId { get; set; }
+
+    [Inject]
+    private SubscriptionAdminService Admin { get; set; } = default!;
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    private SubscriptionEditorModel? _model;
+    private string? _error;
+    private string? _formError;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _deleteConfirm;
+    private IReadOnlyList<EventStoreIndexListItemViewModel> _indexOptions = Array.Empty<EventStoreIndexListItemViewModel>();
+    private IReadOnlyList<EndpointViewModel> _endpointOptions = Array.Empty<EndpointViewModel>();
+    private string? _indexOptionsError;
+    private IReadOnlyList<SubscriptionEvent> _previewEvents = Array.Empty<SubscriptionEvent>();
+    private string? _previewError;
+    private string? _previewMessage;
+    private bool _previewing;
+    private int _previewCount = 10;
+
+    private bool IsCreate => string.IsNullOrWhiteSpace(SubscriptionId);
+    private string PageHeading => IsCreate ? "Create subscription" : $"Edit {SubscriptionId}";
+    private string BackLink => IsCreate ? "/" : $"/admin/subscriptions/{SubscriptionId}";
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _formError = null;
+        _deleteConfirm = false;
+        _indexOptionsError = null;
+        _previewEvents = Array.Empty<SubscriptionEvent>();
+        _previewError = null;
+        _previewMessage = null;
+        _previewing = false;
+        _previewCount = 10;
+
+        try
+        {
+            _model = await Admin.GetEditorModelAsync(IsCreate ? null : SubscriptionId);
+            if (_model is null)
+            {
+                _error = "The subscription was not found.";
+                return;
+            }
+
+            await LoadIndexOptionsAsync();
+            _endpointOptions = await Admin.GetEndpointOptionsAsync();
+            SyncGeneratedSubscriptionId();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadIndexOptionsAsync()
+    {
+        try
+        {
+            var indexOptionsTask = Admin.GetIndexOptionsAsync();
+            var completedTask = await Task.WhenAny(
+                indexOptionsTask,
+                Task.Delay(TimeSpan.FromSeconds(5)));
+            if (completedTask != indexOptionsTask)
+            {
+                throw new TimeoutException("The index catalog did not respond within 5 seconds.");
+            }
+
+            _indexOptions = await indexOptionsTask;
+            if (_model is not null &&
+                !string.IsNullOrWhiteSpace(_model.SecondaryIndexName) &&
+                !_indexOptions.Any(x => string.Equals(x.Name, _model.SecondaryIndexName, StringComparison.OrdinalIgnoreCase)))
+            {
+                _indexOptions = _indexOptions
+                    .Concat([new EventStoreIndexListItemViewModel(_model.SecondaryIndexName, "Unknown", "Currently selected index", string.Empty)])
+                    .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+        }
+        catch (Exception ex)
+        {
+            _indexOptions = Array.Empty<EventStoreIndexListItemViewModel>();
+            _indexOptionsError = $"Unable to load existing indexes right now: {ex.Message}";
+        }
+    }
+
+    private Task OnSecondaryIndexChanged(string selectedIndex)
+    {
+        selectedIndex = selectedIndex?.Trim() ?? string.Empty;
+        if (_model is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (string.IsNullOrWhiteSpace(selectedIndex))
+        {
+            _model.SecondaryIndexName = string.Empty;
+            SyncGeneratedSubscriptionId();
+            return Task.CompletedTask;
+        }
+
+        _model.SecondaryIndexName = selectedIndex;
+        SyncGeneratedSubscriptionId();
+
+        _previewEvents = Array.Empty<SubscriptionEvent>();
+        _previewError = null;
+        _previewMessage = null;
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnEndpointChanged(int endpointId)
+    {
+        if (_model is not null)
+        {
+            _model.EndpointId = endpointId;
+            SyncGeneratedSubscriptionId();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnTagChanged(string tag)
+    {
+        if (_model is not null)
+        {
+            _model.Tag = tag;
+            SyncGeneratedSubscriptionId();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void SyncGeneratedSubscriptionId()
+    {
+        if (!IsCreate || _model is null)
+        {
+            return;
+        }
+
+        var endpoint = _endpointOptions.FirstOrDefault(x => x.EndpointId == _model.EndpointId);
+        if (endpoint is not null && !string.IsNullOrWhiteSpace(_model.SecondaryIndexName))
+        {
+            _model.SubscriptionId = SubscriptionEditorModel.BuildGeneratedSubscriptionId(_model.SecondaryIndexName, endpoint.Name, _model.Tag);
+        }
+    }
+
+    private void OnPreviewCountChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (int.TryParse(value, out var count) && count > 0)
+        {
+            _previewCount = count;
+        }
+    }
+
+    private async Task PreviewAsync()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        var indexName = _model.SecondaryIndexName.Trim();
+        if (string.IsNullOrWhiteSpace(indexName))
+        {
+            _previewError = "Please provide a secondary index name before previewing events.";
+            _previewMessage = null;
+            _previewEvents = Array.Empty<SubscriptionEvent>();
+            return;
+        }
+
+        _previewCount = Math.Max(1, _previewCount);
+        _previewing = true;
+        _previewError = null;
+        _previewMessage = null;
+        _previewEvents = Array.Empty<SubscriptionEvent>();
+
+        try
+        {
+            _previewEvents = await Admin.PreviewEventsAsync(indexName, _previewCount);
+            _previewMessage = _previewEvents.Count == 0
+                ? $"No events were returned for {indexName}."
+                : $"Loaded {_previewEvents.Count} preview event{(_previewEvents.Count == 1 ? string.Empty : "s")} for {indexName}.";
+        }
+        catch (Exception ex)
+        {
+            _previewError = ex.Message;
+        }
+        finally
+        {
+            _previewing = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        _saving = true;
+        _formError = null;
+
+        try
+        {
+            var selectedEndpoint = _endpointOptions.FirstOrDefault(x => x.EndpointId == _model.EndpointId);
+            if (selectedEndpoint is not null)
+            {
+                _model.EndpointUrl = selectedEndpoint.Url;
+            }
+            SyncGeneratedSubscriptionId();
+            if (!_model.TryCreateSubscription(out var subscription, out var error) || subscription is null)
+            {
+                _formError = error;
+                return;
+            }
+
+            await Admin.SaveAsync(subscription);
+            Navigation.NavigateTo($"/admin/subscriptions/{subscription.SubscriptionId}");
+        }
+        catch (Exception ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string FormatCommitPosition(long? commitPosition) =>
+        commitPosition?.ToString(CultureInfo.InvariantCulture) ?? "n/a";
+
+    private static string FormatOccurredAt(DateTimeOffset occurredAt) =>
+        occurredAt.ToString("g", CultureInfo.CurrentCulture);
+
+    private async Task ToggleDeleteConfirm()
+    {
+        if (_model is null || IsCreate)
+        {
+            return;
+        }
+
+        if (!_deleteConfirm)
+        {
+            _deleteConfirm = true;
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            if (await Admin.DeleteAsync(_model.SubscriptionId))
+            {
+                Navigation.NavigateTo("/");
+            }
+            else
+            {
+                _formError = "The subscription could not be deleted.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
