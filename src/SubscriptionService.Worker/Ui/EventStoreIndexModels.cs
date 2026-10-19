@@ -29,6 +29,28 @@ public static class EventStoreIndexPresentation
             .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+    public static IReadOnlyList<EventStoreIndexListItemViewModel> EnsureIndexOption(
+        IEnumerable<EventStoreIndexListItemViewModel> options,
+        string? indexName)
+    {
+        var result = options.ToArray();
+        var trimmedIndexName = indexName?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedIndexName) ||
+            result.Any(x => string.Equals(x.Name, trimmedIndexName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return result;
+        }
+
+        return result
+            .Append(new EventStoreIndexListItemViewModel(
+                trimmedIndexName,
+                "Not created yet",
+                "The index is not currently returned by KurrentDB.",
+                string.Empty))
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     public static string GetStateBadgeClass(string? state) => (state ?? string.Empty).ToLowerInvariant() switch
     {
         "index_state_started" => "badge badge-success",

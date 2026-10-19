@@ -152,6 +152,16 @@ public sealed class SubscriptionEditorModel
                 : $"{prefix}{trimmedSuffix}";
     }
 
+    public static string NormalizeSelectedIndexName(string indexName, bool isBuiltIn)
+    {
+        var trimmedIndexName = indexName.Trim();
+        return isBuiltIn ||
+            string.IsNullOrWhiteSpace(trimmedIndexName) ||
+            trimmedIndexName.StartsWith(DerivedSecondaryIndexPrefix, StringComparison.OrdinalIgnoreCase)
+            ? trimmedIndexName
+            : $"{DerivedSecondaryIndexPrefix}{trimmedIndexName}";
+    }
+
     public static bool TryParseDerivedSecondaryIndexName(string? secondaryIndexName, out string? existingIndexName, out string? suffix)
     {
         existingIndexName = null;

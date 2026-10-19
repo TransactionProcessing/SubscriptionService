@@ -44,6 +44,22 @@ public sealed class EventStoreIndexPresentationTests
     }
 
     [Fact]
+    public void EnsureIndexOption_AddsAPlaceholderForAnIndexNotReturnedByKurrent()
+    {
+        var options = new[]
+        {
+            new EventStoreIndexListItemViewModel("orders-by-country", "started", "User index", string.Empty)
+        };
+
+        var result = EventStoreIndexPresentation.EnsureIndexOption(options, "orders-by-tenant");
+
+        Assert.Contains(result, item =>
+            item.Name == "orders-by-tenant" &&
+            item.Type == "User-defined" &&
+            item.State == "Not created yet");
+    }
+
+    [Fact]
     public void GetResponseSummary_ReportsItemCountForArrayPayloads()
     {
         var json = """

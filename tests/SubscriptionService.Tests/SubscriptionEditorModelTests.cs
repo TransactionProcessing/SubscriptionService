@@ -29,6 +29,25 @@ public sealed class SubscriptionEditorModelTests
     }
 
     [Fact]
+    public void NormalizeSelectedIndexName_PrefixesExistingUserIndexForSubscriptionConfiguration()
+    {
+        var name = SubscriptionEditorModel.NormalizeSelectedIndexName("merchant-balance-archive-events", isBuiltIn: false);
+
+        Assert.Equal("$idx-user-merchant-balance-archive-events", name);
+    }
+
+    [Fact]
+    public void NormalizeSelectedIndexName_PreservesBuiltInAndAlreadyPrefixedIndexes()
+    {
+        Assert.Equal(
+            "$idx-et-OrderPlaced",
+            SubscriptionEditorModel.NormalizeSelectedIndexName("$idx-et-OrderPlaced", isBuiltIn: true));
+        Assert.Equal(
+            "$idx-user-orders-by-user",
+            SubscriptionEditorModel.NormalizeSelectedIndexName("$idx-user-orders-by-user", isBuiltIn: false));
+    }
+
+    [Fact]
     public void TryParseDerivedSecondaryIndexName_RecognizesIndexWithoutSuffix()
     {
         var parsed = SubscriptionEditorModel.TryParseDerivedSecondaryIndexName(
