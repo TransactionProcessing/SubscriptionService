@@ -162,6 +162,14 @@ public sealed class SubscriptionEditorModel
             : $"{DerivedSecondaryIndexPrefix}{trimmedIndexName}";
     }
 
+    public static string NormalizeManuallyEnteredIndexName(string indexName, IEnumerable<string> builtInIndexNames)
+    {
+        var trimmedIndexName = indexName.Trim();
+        var isBuiltIn = builtInIndexNames.Any(name =>
+            string.Equals(name, trimmedIndexName, StringComparison.OrdinalIgnoreCase));
+        return NormalizeSelectedIndexName(trimmedIndexName, isBuiltIn);
+    }
+
     public static bool TryParseDerivedSecondaryIndexName(string? secondaryIndexName, out string? existingIndexName, out string? suffix)
     {
         existingIndexName = null;

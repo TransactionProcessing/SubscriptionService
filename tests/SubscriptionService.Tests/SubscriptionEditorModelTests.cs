@@ -48,6 +48,19 @@ public sealed class SubscriptionEditorModelTests
     }
 
     [Fact]
+    public void NormalizeManuallyEnteredIndexName_PrefixesUserNamesAndPreservesKnownBuiltIns()
+    {
+        var builtInIndexes = new[] { "$idx-et-OrderPlaced" };
+
+        Assert.Equal(
+            "$idx-user-orders-by-country",
+            SubscriptionEditorModel.NormalizeManuallyEnteredIndexName("orders-by-country", builtInIndexes));
+        Assert.Equal(
+            "$idx-et-OrderPlaced",
+            SubscriptionEditorModel.NormalizeManuallyEnteredIndexName("$idx-et-OrderPlaced", builtInIndexes));
+    }
+
+    [Fact]
     public void TryParseDerivedSecondaryIndexName_RecognizesIndexWithoutSuffix()
     {
         var parsed = SubscriptionEditorModel.TryParseDerivedSecondaryIndexName(

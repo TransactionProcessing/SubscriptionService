@@ -412,7 +412,9 @@ else if (_model is not null)
             return Task.CompletedTask;
         }
 
-        _model.SecondaryIndexName = selectedIndex;
+        _model.SecondaryIndexName = SubscriptionEditorModel.NormalizeManuallyEnteredIndexName(
+            selectedIndex,
+            _indexOptions.Where(x => x.IsBuiltIn).Select(x => x.Name));
         SyncGeneratedSubscriptionId();
         ResetPreview();
 
