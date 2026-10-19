@@ -4,6 +4,8 @@ namespace SubscriptionService.Tests;
 
 public sealed class SubscriptionEditorModelTests
 {
+    private const string BuiltInEventTypeIndexName = "$idx-et-OrderPlaced";
+
     [Fact]
     public void BuildGeneratedSubscriptionId_joins_index_and_endpoint_without_spaces()
     {
@@ -40,8 +42,8 @@ public sealed class SubscriptionEditorModelTests
     public void NormalizeSelectedIndexName_PreservesBuiltInAndAlreadyPrefixedIndexes()
     {
         Assert.Equal(
-            "$idx-et-OrderPlaced",
-            SubscriptionEditorModel.NormalizeSelectedIndexName("$idx-et-OrderPlaced", isBuiltIn: true));
+            BuiltInEventTypeIndexName,
+            SubscriptionEditorModel.NormalizeSelectedIndexName(BuiltInEventTypeIndexName, isBuiltIn: true));
         Assert.Equal(
             "$idx-user-orders-by-user",
             SubscriptionEditorModel.NormalizeSelectedIndexName("$idx-user-orders-by-user", isBuiltIn: false));
@@ -50,14 +52,14 @@ public sealed class SubscriptionEditorModelTests
     [Fact]
     public void NormalizeManuallyEnteredIndexName_PrefixesUserNamesAndPreservesKnownBuiltIns()
     {
-        var builtInIndexes = new[] { "$idx-et-OrderPlaced" };
+        var builtInIndexes = new[] { BuiltInEventTypeIndexName };
 
         Assert.Equal(
             "$idx-user-orders-by-country",
             SubscriptionEditorModel.NormalizeManuallyEnteredIndexName("orders-by-country", builtInIndexes));
         Assert.Equal(
-            "$idx-et-OrderPlaced",
-            SubscriptionEditorModel.NormalizeManuallyEnteredIndexName("$idx-et-OrderPlaced", builtInIndexes));
+            BuiltInEventTypeIndexName,
+            SubscriptionEditorModel.NormalizeManuallyEnteredIndexName(BuiltInEventTypeIndexName, builtInIndexes));
     }
 
     [Fact]
@@ -116,3 +118,4 @@ public sealed class SubscriptionEditorModelTests
         Assert.True(subscription!.EnableEventLogging);
     }
 }
+
