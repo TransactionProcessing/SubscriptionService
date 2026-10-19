@@ -12,7 +12,7 @@ public sealed class WebHostPathResolverTests
             contentRoot: "C:\\Windows\\System32",
             executableDirectory: "C:\\Program Files\\CatchupService");
 
-        Assert.Equal("C:\\Program Files\\CatchupService\\wwwroot", result);
+        Assert.Equal(Path.Combine("C:\\Program Files\\CatchupService", "wwwroot"), result);
     }
 
     [Fact]
@@ -26,3 +26,4 @@ public sealed class WebHostPathResolverTests
         Assert.Equal(Path.Combine("C:\\dev\\CatchupService", "wwwroot"), result);
     }
 }
+
