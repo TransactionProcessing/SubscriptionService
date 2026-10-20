@@ -36,14 +36,13 @@ jobs:
           --configuration Release
           --no-build
           --logger "trx;LogFileName=SubscriptionService.Tests.trx"
-          --results-directory "${{ github.workspace }}/TestResults"
+          --results-directory "${{ github.workspace }}/TestResults"          
 
-      - name: Build Docker image
-        run: >-
-          docker build
-          --file src/SubscriptionService.Worker/Dockerfile
-          --tag subscriptionservice:master
-          .
+      - name: Publish Images to Docker Hub
+        run: |
+            docker build . --file src/SubscriptionService.Worker/Dockerfile --tag stuartferguson/subscriptionservice:master
+            docker login --username=${{ secrets.DOCKER_USERNAME }} --password=${{ secrets.DOCKER_PASSWORD }}
+            docker push stuartferguson/subscriptionservice:master
 
       - name: Publish Windows service
         run: >-

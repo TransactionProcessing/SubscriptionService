@@ -52,8 +52,7 @@ jobs:
         run: >-
           docker build
           --file src/SubscriptionService.Worker/Dockerfile
-          --tag stuartferguson/subscriptionservice:${{ github.event.release.prerelease && 'dev' || 'latest' }}
-          .
+          --tag stuartferguson/subscriptionservice:${{ github.event.release.prerelease && 'dev' || 'latest' }}          
 
       - name: Push Docker image
         run: >-
