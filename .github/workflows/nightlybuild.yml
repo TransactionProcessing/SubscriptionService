@@ -39,8 +39,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-        name: tracelogs
-        path: /home/runner/trace/   
+          name: tracelogs
+          path: /home/runner/trace/   
 
       - name: Notify on nightly failure
         if: ${{ failure() }}
