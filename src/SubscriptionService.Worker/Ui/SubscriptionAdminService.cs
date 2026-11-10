@@ -246,6 +246,9 @@ public sealed class SubscriptionAdminService(
     public Task<ReplayOperationResult> ReplayFromCheckpointAsync(string subscriptionId, long commitPosition, CancellationToken cancellationToken = default) =>
         replayService.ReplayFromCheckpointAsync(subscriptionId, commitPosition, cancellationToken);
 
+    public Task<ReplayStatus?> GetReplayStatusAsync(string subscriptionId, CancellationToken cancellationToken = default) =>
+        replayService.GetStatusAsync(subscriptionId, cancellationToken);
+
     public async Task<DailyCommitPositionBackfillResult> BackfillDailyCommitsAsync(
         string subscriptionId,
         CancellationToken cancellationToken = default)
