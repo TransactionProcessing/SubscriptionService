@@ -3,27 +3,33 @@
 
 <PageTitle>@(Details?.Subscription.SubscriptionId ?? SubscriptionId)</PageTitle>
 
-<section class="hero">
+<a class="details-back" href="/">← Back to dashboard</a>
+<section class="hero details-hero">
     <div class="hero-copy">
         <p class="eyebrow">Subscription</p>
         <h1>@(Details?.Subscription.SubscriptionId ?? SubscriptionId)</h1>
-        <p class="muted">
-            @(Details?.Subscription.Tag ?? "Loading subscription details...")
-        </p>
-    </div>
-
-    <div class="hero-actions">
-        <a class="button button-secondary" href="/">Back to dashboard</a>
         @if (Details is not null)
         {
+            <p class="details-subtitle">
+                @(string.IsNullOrWhiteSpace(Details.Subscription.SecondaryIndexName) ? "All streams" : Details.Subscription.SecondaryIndexName)
+                <span>·</span> @Details.Subscription.Tag <span>·</span> @Details.Subscription.EndpointUrl
+            </p>
+        }
+        else
+        {
+            <p class="details-subtitle">Loading subscription details...</p>
+        }
+    </div>
+    @if (Details is not null)
+    {
+        <div class="hero-actions">
             <a class="button button-secondary" href="@($"/admin/subscriptions/{Details.Subscription.SubscriptionId}/edit")">Edit</a>
             <button class="button button-secondary" @onclick="ToggleStateAsync" disabled="@_busy">
                 @(Details.Subscription.Enabled && Details.Subscription.OperationalState == SubscriptionOperationalState.Healthy ? "Stop" : "Start")
             </button>
             <button class="button button-secondary" @onclick="BackfillDailyCommitsAsync" disabled="@_busy">Backfill daily commits</button>
-            <button type="button" class="button button-primary" @onclick="ReplayAsync" disabled="@_busy">Replay now</button>
-        }
-    </div>
+        </div>
+    }
 </section>
 
 @if (_loading)
@@ -44,214 +50,177 @@ else if (!string.IsNullOrWhiteSpace(_error))
 }
 else if (Details is not null)
 {
-    <section class="stats-grid three-up">
-        <article class="stat-card panel">
-            <span class="stat-label">Health</span>
-            <strong class="@GetHealthClass(Details.Status?.Health)">@DisplayValue(Details.Status?.Health)</strong>
-            <span class="stat-foot">Running: @(Details.Status?.IsRunning == true ? "yes" : "no")</span>
+    <section class="details-summary" aria-label="Subscription summary">
+        <div class="details-metric">
+            <span>Health</span>
+            <strong class="@GetHealthTextClass(Details.Status?.Health)">@DisplayValue(Details.Status?.Health)</strong>
+            <small>@(Details.Status?.IsRunning == true ? "Running" : "Not running")</small>
+        </div>
+        <div class="details-metric">
+            <span>Progress</span>
+            <strong>@(Details.Status?.ProgressDisplay ?? "n/a")</strong>
+            <small>Commit @DisplayValue(Details.Status?.CommitPosition)</small>
+        </div>
+        <div class="details-metric">
+            <span>Parked events</span>
+            <strong class="@(Details.ParkedEvents.Count > 0 ? "details-warning" : "details-success")">@Details.ParkedEvents.Count</strong>
+            <small>Latest @DisplayDate(Details.Status?.LatestParkedAt)</small>
+        </div>
+        <div class="details-metric">
+            <span>Replay status</span>
+            <strong class="@(Details.ReplayStatus?.HasActiveReplaySession == true ? "details-warning" : "details-success")">@(Details.ReplayStatus?.HasActiveReplaySession == true ? "Active" : "Idle")</strong>
+            <small>@((Details.ReplayStatus?.ActiveReplaySessionCount ?? 0).ToString(CultureInfo.InvariantCulture)) active sessions</small>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(Details.Status?.RuntimeFailureReason) || !string.IsNullOrWhiteSpace(Details.Status?.OperationalReason))
+    {
+        <div class="details-alert">
             @if (!string.IsNullOrWhiteSpace(Details.Status?.RuntimeFailureReason))
             {
-                <span class="stat-foot">Worker error: @Details.Status!.RuntimeFailureReason</span>
-                <span class="stat-foot">Observed: @DisplayDate(Details.Status.RuntimeFailureAt)</span>
+                <span>Worker error: @Details.Status!.RuntimeFailureReason</span>
+                <span class="muted">Observed @DisplayDate(Details.Status.RuntimeFailureAt)</span>
             }
             @if (!string.IsNullOrWhiteSpace(Details.Status?.OperationalReason))
             {
-                <span class="stat-foot">@Details.Status!.OperationalReason</span>
+                <span>@Details.Status!.OperationalReason</span>
             }
-        </article>
-        <article class="stat-card panel">
-            <span class="stat-label">Progress</span>
-            <strong>@(Details.Status?.ProgressDisplay ?? "n/a")</strong>
-            <span class="stat-foot">Commit @DisplayValue(Details.Status?.CommitPosition)</span>
-        </article>
-        <article class="stat-card panel">
-            <span class="stat-label">Parked events</span>
-            <strong>@(Details.Status?.ParkedEventCount ?? 0)</strong>
-            <span class="stat-foot">Latest @DisplayDate(Details.Status?.LatestParkedAt)</span>
-        </article>
-    </section>
+        </div>
+    }
 
-    <section class="panel detail-grid">
-        <div class="detail-card last-delivery-card">
-            <p class="eyebrow">Last delivery</p>
-            @if (_lastDeliverySnapshot is null)
-            {
-                <h2>No delivery activity yet</h2>
-                <p class="muted">Once the worker sends an event, the latest delivery attempt will appear here.</p>
-            }
-            else
-            {
-                <h2>@_lastDeliverySnapshot.EventType</h2>
-                <p class="muted">@_lastDeliverySnapshot.StreamName</p>
-                <p class="muted">Event: @_lastDeliverySnapshot.EventId</p>
-                <p class="muted">Sent: @DisplayDate(_lastDeliverySnapshot.DeliveredAt)</p>
-                <p class="muted">Status: @_lastDeliverySnapshot.Status</p>
-                @if (!string.IsNullOrWhiteSpace(_lastDeliverySnapshot.FailureReason))
+    <div class="details-layout">
+        <div class="details-main-column">
+            <section class="details-section">
+                <div class="details-section-heading"><h2>Last delivery</h2><span>Latest attempt</span></div>
+                @if (_lastDeliverySnapshot is null)
                 {
-                    <p class="muted">Reason: @_lastDeliverySnapshot.FailureReason</p>
+                    <p class="muted details-empty">No delivery activity yet. The latest attempt will appear here when an event is sent.</p>
                 }
-            }
-        </div>
-    </section>
+                else
+                {
+                    <div class="delivery-summary-row">
+                        <div>
+                            <strong>@_lastDeliverySnapshot.EventType</strong>
+                            <span class="muted"> · @_lastDeliverySnapshot.StreamName · Event @_lastDeliverySnapshot.EventId</span>
+                        </div>
+                        <span class="@(string.IsNullOrWhiteSpace(_lastDeliverySnapshot.FailureReason) ? "details-success" : "details-danger")">@_lastDeliverySnapshot.Status</span>
+                        <time>@DisplayDate(_lastDeliverySnapshot.DeliveredAt)</time>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_lastDeliverySnapshot.FailureReason))
+                    {
+                        <p class="delivery-failure-summary">@_lastDeliverySnapshot.FailureReason</p>
+                    }
+                }
+            </section>
 
-    <section class="panel detail-grid">
-        <div class="detail-card">
-            <p class="eyebrow">Delivery target</p>
-            <h2>@Details.Subscription.EndpointUrl</h2>
-            <p class="muted">Tag: @Details.Subscription.Tag</p>
-        </div>
-        <div class="detail-card">
-            <p class="eyebrow">Index</p>
-            <h2>@(string.IsNullOrWhiteSpace(Details.Subscription.SecondaryIndexName) ? "All streams" : Details.Subscription.SecondaryIndexName)</h2>
-            <p class="muted">Enabled: @(Details.Subscription.Enabled ? "Yes" : "No")</p>
-            <p class="muted">State: @Details.Subscription.OperationalState</p>
-        </div>
-        <div class="detail-card">
-            <p class="eyebrow">Replay</p>
-            <h2>@(Details.ReplayStatus?.HasActiveReplaySession == true ? "Active" : "Idle")</h2>
-            <p class="muted">@((Details.ReplayStatus?.ActiveReplaySessionCount ?? 0).ToString(CultureInfo.InvariantCulture)) active sessions</p>
-        </div>
-    </section>
+            <section class="details-section">
+                <div class="details-section-heading"><h2>Configuration</h2><span>Subscription details</span></div>
+                <dl class="details-properties">
+                    <div><dt>Delivery target</dt><dd title="@Details.Subscription.EndpointUrl">@Details.Subscription.EndpointUrl</dd></div>
+                    <div><dt>Index</dt><dd>@(string.IsNullOrWhiteSpace(Details.Subscription.SecondaryIndexName) ? "All streams" : Details.Subscription.SecondaryIndexName)</dd></div>
+                    <div><dt>Tag</dt><dd>@Details.Subscription.Tag</dd></div>
+                    <div><dt>Enabled</dt><dd>@(Details.Subscription.Enabled ? "Yes" : "No")</dd></div>
+                    <div><dt>Operational state</dt><dd class="@GetHealthTextClass(Details.Subscription.OperationalState.ToString())">@Details.Subscription.OperationalState</dd></div>
+                    <div><dt>Retry policy</dt><dd>@Details.Subscription.Retry.MaxAttempts attempts · @Details.Subscription.Retry.Delay.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture) sec</dd></div>
+                </dl>
+            </section>
 
-    <section class="panel">
-        <div class="panel-header">
-            <div>
-                <p class="eyebrow">Checkpoint</p>
-                <h2>Subscription checkpoint</h2>
-                <p class="muted">Sourced from <code>SubscriptionCheckpoints</code>.</p>
-            </div>
-        </div>
-
-        @if (Details.Checkpoint.CommitPosition is null && Details.Checkpoint.ProcessedCount == 0 && string.IsNullOrWhiteSpace(Details.Checkpoint.CheckpointReason))
-        {
-            <div class="empty-state compact">
-                <h3>No checkpoint recorded yet.</h3>
-                <p class="muted">The subscription has not persisted a checkpoint row yet.</p>
-            </div>
-        }
-        else
-        {
-            <div class="table-scroll">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Commit position</th>
-                            <th>Processed count</th>
-                            <th>Checkpoint reason</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>@DisplayValue(Details.Checkpoint.CommitPosition)</td>
-                            <td>@Details.Checkpoint.ProcessedCount.ToString(CultureInfo.InvariantCulture)</td>
-                            <td>@(string.IsNullOrWhiteSpace(Details.Checkpoint.CheckpointReason) ? "n/a" : Details.Checkpoint.CheckpointReason)</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        }
-    </section>
-
-    <section class="panel">
-        <div class="panel-header">
-            <div>
-                <p class="eyebrow">Daily positions</p>
-                <h2>Replay checkpoints</h2>
-                <p class="muted">Useful for parked-queue replay and secondary index scanning.</p>
-            </div>
-            <div class="filter-row">
-                <label class="field compact-field">
-                    <span>From</span>
-                    <input type="date" class="input" @bind="_fromDate" />
-                </label>
-                <label class="field compact-field">
-                    <span>To</span>
-                    <input type="date" class="input" @bind="_toDate" />
-                </label>
-                <button class="button button-secondary" @onclick="ApplyFiltersAsync" disabled="@_busy">Apply</button>
-            </div>
+            <section class="details-section" id="parked-events">
+                <div class="details-section-heading"><h2>Parked events <span class="@(Details.ParkedEvents.Count > 0 ? "details-warning" : "")">· @Details.ParkedEvents.Count</span></h2><span>Newest first</span></div>
+                @if (Details.ParkedEvents.Count == 0)
+                {
+                    <p class="muted details-empty">No parked events. This subscription is currently clear.</p>
+                }
+                else
+                {
+                    <div class="parked-replay-action">
+                        <div>
+                            <strong>Replay all @Details.ParkedEvents.Count parked events</strong>
+                            <p>Retries saved events oldest first; successes are removed and failures are parked again. The subscription checkpoint is not rewound.</p>
+                            <p class="parked-replay-scope">Single-event retry is unavailable. This action targets all parked events for @Details.Subscription.SubscriptionId.</p>
+                        </div>
+                        <button type="button" class="button button-primary" @onclick="ReplayAsync"
+                                disabled="@(_busy || Details.ReplayStatus?.HasActiveReplaySession == true)">
+                            @(Details.ReplayStatus?.HasActiveReplaySession == true ? "Replay in progress" : $"Replay all {Details.ParkedEvents.Count} events")
+                        </button>
+                    </div>
+                    <div class="parked-event-list">
+                        @foreach (var parkedEvent in Details.ParkedEvents.OrderByDescending(x => x.ParkedAt))
+                        {
+                            <article class="parked-event-row">
+                                <div class="parked-event-identity">
+                                    <strong title="@parkedEvent.EventId">@parkedEvent.EventId</strong>
+                                    <span>@parkedEvent.StreamName · @parkedEvent.EventType</span>
+                                </div>
+                                <p class="failure-reason">@parkedEvent.FailureReason</p>
+                                <time>@DisplayDate(parkedEvent.ParkedAt)</time>
+                                <div class="parked-event-meta">
+                                    <span>@parkedEvent.AttemptCount attempts</span>
+                                    <span>@parkedEvent.ContentType</span>
+                                    <details class="payload-details">
+                                        <summary>Payload · @parkedEvent.Payload.Length bytes</summary>
+                                        <pre class="payload-preview">@SubscriptionAdminService.FormatPreview(parkedEvent.Payload)</pre>
+                                    </details>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                    <p class="details-footnote">Each row shows the event identifier, stream, failure, parked time and attempt count. Expand a payload when you need it.</p>
+                }
+            </section>
         </div>
 
-        @if (Details.DailyPositions.Count == 0)
-        {
-            <div class="empty-state compact">
-                <h3>No daily positions in this range.</h3>
-                <p class="muted">Adjust the dates to inspect older replay checkpoints.</p>
-            </div>
-        }
-        else
-        {
-            <div class="table-scroll">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Secondary index</th>
-                            <th>Commit position</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+        <aside class="details-side-column">
+            <section class="details-section">
+                <div class="details-section-heading"><h2>Checkpoint</h2><span>Subscription</span></div>
+                @if (Details.Checkpoint.CommitPosition is null && Details.Checkpoint.ProcessedCount == 0 && string.IsNullOrWhiteSpace(Details.Checkpoint.CheckpointReason))
+                {
+                    <p class="muted details-empty">No checkpoint recorded yet.</p>
+                }
+                else
+                {
+                    <dl class="details-checkpoint-values">
+                        <div><dt>Commit position</dt><dd class="details-mono">@DisplayValue(Details.Checkpoint.CommitPosition)</dd></div>
+                        <div><dt>Processed</dt><dd>@Details.Checkpoint.ProcessedCount.ToString("N0", CultureInfo.InvariantCulture)</dd></div>
+                        <div><dt>Reason</dt><dd>@(string.IsNullOrWhiteSpace(Details.Checkpoint.CheckpointReason) ? "n/a" : Details.Checkpoint.CheckpointReason)</dd></div>
+                    </dl>
+                    <p class="details-footnote">Sourced from <code>SubscriptionCheckpoints</code>.</p>
+                }
+            </section>
+
+            <section class="details-section">
+                <div class="details-section-heading"><h2>Replay checkpoints</h2><span>Daily positions</span></div>
+                <div class="details-date-filters">
+                    <label><span>From</span><input type="date" class="input" @bind="_fromDate" /></label>
+                    <label><span>To</span><input type="date" class="input" @bind="_toDate" /></label>
+                    <button class="button button-secondary" @onclick="ApplyFiltersAsync" disabled="@_busy">Apply</button>
+                </div>
+                @if (Details.DailyPositions.Count == 0)
+                {
+                    <p class="muted details-empty">No daily positions in this range. Adjust the dates to inspect older checkpoints.</p>
+                }
+                else
+                {
+                    <div class="daily-position-list">
                         @foreach (var row in Details.DailyPositions)
                         {
-                            <tr>
-                                <td>@row.Date.ToString("dd MMM yyyy", CultureInfo.CurrentCulture)</td>
-                                <td>@row.SecondaryIndexName</td>
-                                <td>@DisplayValue(row.CommitPosition)</td>
-                                <td>
-                                    @if (row.CommitPosition is long commitPosition)
-                                    {
-                                        <button type="button" class="button button-secondary" @onclick="() => ReplayFromCheckpointAsync(commitPosition)" disabled="@_busy">Replay from here</button>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </section>
-
-    <section class="panel" id="parked-events">
-        <div class="panel-header">
-            <div>
-                <p class="eyebrow">Parked events</p>
-                <h2>Recent failures</h2>
-            </div>
-        </div>
-
-        @if (Details.ParkedEvents.Count == 0)
-        {
-            <div class="empty-state compact">
-                <h3>No parked events.</h3>
-                <p class="muted">This subscription is currently clear.</p>
-            </div>
-        }
-        else
-        {
-            <div class="card-stack">
-                @foreach (var parkedEvent in Details.ParkedEvents.OrderByDescending(x => x.ParkedAt))
-                {
-                    <article class="parked-card">
-                        <div class="parked-header">
-                            <div>
-                                <strong>@parkedEvent.EventId</strong>
-                                <div class="muted small">@parkedEvent.StreamName · @parkedEvent.EventType</div>
+                            <div class="daily-position-row">
+                                <div>
+                                    <strong>@row.Date.ToString("dd MMM yyyy", CultureInfo.CurrentCulture)</strong>
+                                    <span>@row.SecondaryIndexName</span>
+                                    <small>Commit @DisplayValue(row.CommitPosition)</small>
+                                </div>
+                                @if (row.CommitPosition is long commitPosition)
+                                {
+                                    <button type="button" class="button button-secondary" @onclick="() => ReplayFromCheckpointAsync(commitPosition)" disabled="@_busy">Replay from here</button>
+                                }
                             </div>
-                            <div class="muted small">@DisplayDate(parkedEvent.ParkedAt)</div>
-                        </div>
-                        <p class="failure-reason">@parkedEvent.FailureReason</p>
-                        <div class="badge-row">
-                            <span class="badge badge-muted">Attempts: @parkedEvent.AttemptCount</span>
-                            <span class="badge badge-info">@parkedEvent.ContentType</span>
-                            <span class="badge badge-success">@DisplayDate(parkedEvent.OccurredAt)</span>
-                        </div>
-                        <pre class="payload-preview">@SubscriptionAdminService.FormatPreview(parkedEvent.Payload)</pre>
-                    </article>
+                        }
+                    </div>
                 }
-            </div>
-        }
-    </section>
+            </section>
+        </aside>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(_toast))
     {
@@ -261,7 +230,6 @@ else if (Details is not null)
         </section>
     }
 }
-
 @code {
     [Parameter]
     public string SubscriptionId { get; set; } = string.Empty;
@@ -478,13 +446,13 @@ else if (Details is not null)
         return (_fromDate.ToDateTime(TimeOnly.MinValue), _toDate.ToDateTime(TimeOnly.MinValue));
     }
 
-    private static string GetHealthClass(string? health) => (health ?? string.Empty).ToLowerInvariant() switch
+    private static string GetHealthTextClass(string? health) => (health ?? string.Empty).ToLowerInvariant() switch
     {
-        "healthy" => "badge badge-success",
-        "replaying" => "badge badge-warning",
-        "stopped" => "badge badge-muted",
-        "faulted" => "badge badge-danger",
-        _ => "badge badge-info"
+        "healthy" => "details-success",
+        "replaying" => "details-warning",
+        "stopped" => "muted",
+        "faulted" => "details-danger",
+        _ => "muted"
     };
 
     private static string DisplayValue(string? value) => string.IsNullOrWhiteSpace(value) ? "n/a" : value;
