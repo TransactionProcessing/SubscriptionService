@@ -7,166 +7,181 @@
     <div class="hero-copy">
         <p class="eyebrow">Diagnostics</p>
         <h1>Connection diagnostics</h1>
-        <p class="muted">
-            View the live subscription connections and the independent count subscriptions side by side.
-        </p>
+        <p class="muted">Find an unhealthy or idle connection, then open its details to trace the cause.</p>
     </div>
 
     <div class="hero-actions">
-        <a class="button button-secondary" href="/">Back to dashboard</a>
-        <a class="button button-secondary" href="/admin/subscriptions">Manage subscriptions</a>
+        <a class="button button-secondary" href="/">Manage subscriptions</a>
     </div>
 </section>
 
-<section class="stats-grid three-up">
-    <article class="stat-card panel">
-        <span class="stat-label">Live connections</span>
-        <strong>@_liveRows.Count</strong>
-        <span class="stat-foot">Main subscription runtimes currently in memory</span>
-    </article>
-    <article class="stat-card panel">
-        <span class="stat-label">Live events processed</span>
-        <strong>@_liveEventCount.ToString(CultureInfo.InvariantCulture)</strong>
-        <span class="stat-foot">Total processed events across the main subscription runtimes</span>
-    </article>
-    <article class="stat-card panel">
-        <span class="stat-label">Count connections</span>
-        <strong>@_countRows.Count</strong>
-        <span class="stat-foot">Independent count subscriptions currently running</span>
-    </article>
-    <article class="stat-card panel">
-        <span class="stat-label">Count worker</span>
-        <strong>@_countWorkerSummary</strong>
-        <span class="stat-foot">Configured / attempted / failed independent subscriptions</span>
-    </article>
-    <article class="stat-card panel">
-        <span class="stat-label">Last refresh</span>
-        <strong>@_lastRefresh.ToString("HH:mm:ss", CultureInfo.CurrentCulture)</strong>
-        <span class="stat-foot">Auto-refreshing every second</span>
-    </article>
+<section class="connection-summary" aria-label="Connection summary">
+    <div class="connection-summary-item connection-summary-attention">
+        <strong>@AttentionCount</strong>
+        <span>Need attention</span>
+    </div>
+    <div class="connection-summary-item connection-summary-healthy">
+        <strong>@(_connections.Count - AttentionCount)</strong>
+        <span>Other connections</span>
+    </div>
+    <span class="connection-refresh">Updated @_lastRefresh.ToString("HH:mm:ss", CultureInfo.CurrentCulture) · refreshes every second</span>
 </section>
 
-<section class="panel">
+<section class="panel connection-panel">
     <div class="panel-header">
         <div>
-            <p class="eyebrow">Live</p>
-            <h2>Main subscription connections</h2>
+            <h2>All connections</h2>
         </div>
+        <div class="connection-list-count">@FilteredConnections.Count() of @_connections.Count connections · attention first</div>
     </div>
 
-    @if (_liveRows.Count == 0)
+    <div class="connection-filters" role="search">
+        <label class="connection-search">
+            <span class="sr-only">Search by subscription, index, event, or error</span>
+            <input type="search" class="input" placeholder="Search subscription or index…" @bind="_search" @bind:event="oninput" />
+        </label>
+        <label>
+            <span class="sr-only">Filter by connection state</span>
+            <select class="input" @bind="_stateFilter">
+                <option value="NeedsAttention">Needs attention</option>
+                <option value="All">All states</option>
+                <option value="Faulted">Faulted</option>
+                <option value="Failed">Failed</option>
+                <option value="Idle">Idle</option>
+                <option value="Live">Live</option>
+                <option value="Counting">Counting</option>
+                <option value="CaughtUp">Caught up</option>
+                <option value="Starting">Starting</option>
+                <option value="Stopped">Stopped</option>
+            </select>
+        </label>
+        <label>
+            <span class="sr-only">Filter by connection type</span>
+            <select class="input" @bind="_typeFilter">
+                <option value="All">All connections</option>
+                <option value="Main">Main subscriptions</option>
+                <option value="Count">Count subscriptions</option>
+            </select>
+        </label>
+        <button type="button" class="button button-ghost button-compact" @onclick="ClearFilters">Clear filters</button>
+    </div>
+
+    <details class="count-worker-details">
+        <summary>Count worker status: @_countWorkerSummary</summary>
+        <p class="muted small">@_countWorkerHint</p>
+    </details>
+
+    @if (_connections.Count == 0)
     {
         <div class="empty-state compact">
-            <h3>No live subscription connections.</h3>
+            <h3>No connections are running yet.</h3>
             <p class="muted">The worker may not have started any subscription runtimes yet.</p>
         </div>
     }
-    else
-    {
-        <div class="table-scroll">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Subscription</th>
-                        <th>Processed</th>
-                        <th>State</th>
-                        <th>Last event</th>
-                        <th>Updated</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in _liveRows)
-                    {
-                        <tr>
-                            <td>
-                                <strong>@row.SubscriptionId</strong>
-                            </td>
-                            <td>@row.ProcessedCountDisplay</td>
-                            <td>
-                                <span class="@row.StateClass">@row.State</span>
-                                @if (!string.IsNullOrWhiteSpace(row.FailureReason))
-                                {
-                                    <div class="muted small">@row.FailureReason</div>
-                                }
-                            </td>
-                            <td>
-                                <div>@(row.LastEventId ?? "n/a")</div>
-                                <div class="muted small">@row.LastStreamName</div>
-                                <div class="muted small">@row.LastEventType</div>
-                            </td>
-                            <td>@row.UpdatedAtDisplay</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
-</section>
-
-<section class="panel">
-    <div class="panel-header">
-        <div>
-            <p class="eyebrow">Count</p>
-            <h2>Independent count subscriptions</h2>
-        </div>
-    </div>
-
-    @if (_countRows.Count == 0)
+    else if (!FilteredConnections.Any())
     {
         <div class="empty-state compact">
-            <h3>No count subscriptions yet.</h3>
-            <p class="muted">@_countWorkerHint</p>
+            @if (_stateFilter == "NeedsAttention" && string.IsNullOrWhiteSpace(_search) && _typeFilter == "All")
+            {
+                <h3>No failed or idle connections.</h3>
+                <p class="muted">All running connections look healthy. You can still view every connection below.</p>
+                <button type="button" class="button button-secondary button-compact" @onclick="ShowAllConnections">View all connections</button>
+            }
+            else
+            {
+                <h3>No connections match these filters.</h3>
+                <p class="muted">Try a different state, connection type, or search term.</p>
+            }
         </div>
     }
     else
     {
-        <div class="table-scroll">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Subscription</th>
-                        <th>Index</th>
-                        <th>State</th>
-                        <th>Total count</th>
-                        <th>Commit</th>
-                        <th>Last event</th>
-                        <th>Updated</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in _countRows)
-                    {
-                        <tr>
-                            <td><strong>@row.SubscriptionId</strong></td>
-                            <td>@row.SecondaryIndexName</td>
-                            <td>
-                                <span class="@row.StateClass">@row.State</span>
-                                @if (row.IsCaughtUp)
-                                {
-                                    <div class="muted small">Caught up</div>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(row.FailureReason))
-                                {
-                                    <div class="muted small">@row.FailureReason</div>
-                                }
-                            </td>
-                            <td>@row.TotalCount.ToString(CultureInfo.InvariantCulture)</td>
-                            <td>@row.CommitPositionDisplay</td>
-                            <td>
-                                <div>@(row.LastEventId ?? "n/a")</div>
-                                <div class="muted small">@row.LastStreamName</div>
-                                <div class="muted small">@row.LastEventType</div>
-                            </td>
-                            <td>@row.UpdatedAtDisplay</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+        <div class="connection-list">
+            @foreach (var row in FilteredConnections)
+            {
+                <article @key="@(row.TypeKey + ":" + row.SubscriptionId)" class="connection-card @row.CardClass">
+                    <div class="connection-card-heading">
+                        <span class="@row.StateClass">@row.State</span>
+                        <strong class="connection-name">@row.DisplayName</strong>
+                        <span class="connection-kind">@row.ConnectionType</span>
+                        @if (row.IsIdle && row.IdleDuration is TimeSpan idleDuration)
+                        {
+                            <span class="connection-age">Idle for @FormatDuration(idleDuration)</span>
+                        }
+                        @if (!row.IsIdle && row.UpdatedAt is DateTimeOffset updatedAt)
+                        {
+                            <span class="connection-age">Updated @updatedAt.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture)</span>
+                        }
+                    </div>
+
+                    <p class="connection-summary-line @row.SummaryClass">@row.Summary</p>
+
+                    <div class="connection-card-meta">
+                        <a class="connection-subscription-link" href="@($"/admin/subscriptions/{Uri.EscapeDataString(row.SubscriptionId)}")">View subscription</a>
+                        @if (!string.IsNullOrWhiteSpace(row.SecondaryIndexName))
+                        {
+                            <span><span class="connection-meta-label">Index</span> @row.SecondaryIndexName</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(row.LastEventId))
+                        {
+                            <span><span class="connection-meta-label">Last event</span> @row.LastEventId</span>
+                        }
+                        @if (row.ProcessedCount is long processedCount)
+                        {
+                            <span><span class="connection-meta-label">Processed</span> @processedCount.ToString(CultureInfo.CurrentCulture)</span>
+                        }
+                        @if (row.TotalCount is long totalCount)
+                        {
+                            <span><span class="connection-meta-label">Count</span> @totalCount.ToString(CultureInfo.CurrentCulture)</span>
+                        }
+                    </div>
+
+                    <details class="connection-details">
+                        <summary>Technical details</summary>
+                        <dl>
+                            <div><dt>Subscription ID</dt><dd>@row.SubscriptionId</dd></div>
+                            @if (!string.IsNullOrWhiteSpace(row.SecondaryIndexName))
+                            {
+                                <div><dt>Index</dt><dd>@row.SecondaryIndexName</dd></div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(row.LastEventId))
+                            {
+                                <div><dt>Last event</dt><dd>@row.LastEventId</dd></div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(row.LastStreamName))
+                            {
+                                <div><dt>Stream</dt><dd>@row.LastStreamName</dd></div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(row.LastEventType))
+                            {
+                                <div><dt>Event type</dt><dd>@row.LastEventType</dd></div>
+                            }
+                            @if (row.CommitPosition is long commitPosition)
+                            {
+                                <div><dt>Commit position</dt><dd>@commitPosition.ToString(CultureInfo.CurrentCulture)</dd></div>
+                            }
+                            @if (row.UpdatedAt is DateTimeOffset detailUpdatedAt)
+                            {
+                                <div><dt>Last activity</dt><dd>@detailUpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss", CultureInfo.CurrentCulture)</dd></div>
+                            }
+                        </dl>
+                        @if (!string.IsNullOrWhiteSpace(row.FailureReason))
+                        {
+                            <div class="connection-exception">
+                                <span>Exception details</span>
+                                <pre>@row.FailureReason</pre>
+                            </div>
+                        }
+                    </details>
+                </article>
+            }
         </div>
     }
 </section>
 
 @code {
+    private static readonly TimeSpan IdleThreshold = TimeSpan.FromMinutes(3);
+
     [Inject]
     private WorkerRuntimeRegistry RuntimeRegistry { get; set; } = default!;
 
@@ -179,11 +194,22 @@
     private readonly CancellationTokenSource _refreshCts = new();
     private Task? _refreshLoop;
     private DateTimeOffset _lastRefresh = DateTimeOffset.UtcNow;
-    private List<LiveConnectionRow> _liveRows = [];
-    private List<CountConnectionRow> _countRows = [];
-    private long _liveEventCount;
+    private List<ConnectionRow> _connections = [];
     private string _countWorkerSummary = "0 / 0 / 0";
     private string _countWorkerHint = "The worker may not have created the count trackers yet.";
+    private string _search = string.Empty;
+    private string _stateFilter = "NeedsAttention";
+    private string _typeFilter = "All";
+
+    private int AttentionCount => _connections.Count(IsAttentionState);
+
+    private IEnumerable<ConnectionRow> FilteredConnections => _connections
+        .Where(row => string.IsNullOrWhiteSpace(_search) || row.SearchableText.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase))
+        .Where(row => _typeFilter == "All" || string.Equals(row.TypeKey, _typeFilter, StringComparison.OrdinalIgnoreCase))
+        .Where(row => MatchesState(row, _stateFilter))
+        .OrderBy(GetAttentionPriority)
+        .ThenBy(row => row.SubscriptionId, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(row => row.TypeKey, StringComparer.OrdinalIgnoreCase);
 
     protected override void OnInitialized()
     {
@@ -195,16 +221,10 @@
     {
         _lastRefresh = DateTimeOffset.UtcNow;
 
-        _liveRows = RuntimeRegistry.GetAll()
-            .Select(kvp => CreateLiveRow(kvp.Key, kvp.Value))
-            .OrderBy(x => x.SubscriptionId, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        _liveEventCount = _liveRows.Sum(x => x.ProcessedCount);
-
-        _countRows = CountRegistry.GetAll()
-            .Select(CreateCountRow)
-            .OrderBy(x => x.SubscriptionId, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var liveRows = RuntimeRegistry.GetAll()
+            .Select(kvp => CreateLiveRow(kvp.Key, kvp.Value));
+        var countRows = CountRegistry.GetAll().Select(CreateCountRow);
+        _connections = liveRows.Concat(countRows).ToList();
 
         var countWorkerSnapshot = CountWorkerRegistry.GetSnapshot();
         _countWorkerSummary = $"{countWorkerSnapshot.ConfiguredSubscriptions} / {countWorkerSnapshot.AttemptedSubscriptions} / {countWorkerSnapshot.FailedSubscriptions}";
@@ -231,35 +251,168 @@
         }
     }
 
-    private static LiveConnectionRow CreateLiveRow(string subscriptionId, SubscriptionRuntime runtime)
+    private static ConnectionRow CreateLiveRow(string subscriptionId, SubscriptionRuntime runtime)
     {
         var snapshot = runtime.GetLastDeliverySnapshot();
-        return new LiveConnectionRow(
+        var state = snapshot?.Status ?? "Idle";
+        if (state.Equals("Delivered", StringComparison.OrdinalIgnoreCase))
+        {
+            state = "Live";
+        }
+        var isIdle = string.Equals(state, "Idle", StringComparison.OrdinalIgnoreCase) ||
+            (snapshot?.DeliveredAt is DateTimeOffset deliveredAt && IsInactive(state, deliveredAt));
+        if (isIdle)
+        {
+            state = "Idle";
+        }
+
+        var failureReason = snapshot?.FailureReason;
+        var summary = isIdle
+            ? snapshot?.DeliveredAt is DateTimeOffset lastDeliveredAt
+                ? $"No events received for {FormatDuration(DateTimeOffset.UtcNow - lastDeliveredAt)}"
+                : "No events received yet"
+            : !string.IsNullOrWhiteSpace(failureReason)
+                ? failureReason
+                : $"Last event {snapshot?.EventId ?? "n/a"} · {snapshot?.EventType ?? "n/a"}";
+
+        return new ConnectionRow(
             subscriptionId,
-            runtime.GetProcessedCount(),
             snapshot?.EventId ?? "n/a",
-            snapshot?.StreamName ?? "n/a",
-            snapshot?.EventType ?? "n/a",
+            snapshot?.StreamName,
+            snapshot?.EventType,
             snapshot?.DeliveredAt,
-            snapshot?.Status ?? "Idle",
-            snapshot?.FailureReason,
-            GetStateClass(snapshot?.Status ?? "Idle"));
+            state,
+            failureReason,
+            runtime.GetProcessedCount(),
+            null,
+            null,
+            isIdle,
+            isIdle && snapshot?.DeliveredAt is DateTimeOffset idleSince ? DateTimeOffset.UtcNow - idleSince : null,
+            null,
+            "Main subscription",
+            "Main",
+            summary);
     }
 
-    private static CountConnectionRow CreateCountRow(CountConnectionSnapshot snapshot) =>
-        new(
+    private static ConnectionRow CreateCountRow(CountConnectionSnapshot snapshot)
+    {
+        var state = snapshot.State;
+        var isIdle = snapshot.UpdatedAt <= DateTimeOffset.UtcNow - IdleThreshold && IsActiveState(state);
+        if (isIdle)
+        {
+            state = "Idle";
+        }
+
+        var summary = isIdle
+            ? $"No events received for {FormatDuration(DateTimeOffset.UtcNow - snapshot.UpdatedAt)}"
+            : !string.IsNullOrWhiteSpace(snapshot.FailureReason)
+                ? snapshot.FailureReason
+                : snapshot.IsCaughtUp
+                    ? "Count is caught up with the index"
+                    : $"Counting events · {snapshot.TotalCount.ToString(CultureInfo.CurrentCulture)} processed";
+
+        return new ConnectionRow(
             snapshot.SubscriptionId,
-            snapshot.SecondaryIndexName,
-            snapshot.State,
-            snapshot.TotalCount,
-            snapshot.IsCaughtUp,
-            snapshot.LastCommitPosition,
-            snapshot.LastEventId,
+            snapshot.LastEventId ?? "n/a",
             snapshot.LastStreamName,
             snapshot.LastEventType,
             snapshot.UpdatedAt,
+            state,
             snapshot.FailureReason,
-            GetStateClass(snapshot.State));
+            null,
+            snapshot.TotalCount,
+            snapshot.LastCommitPosition,
+            isIdle,
+            isIdle ? DateTimeOffset.UtcNow - snapshot.UpdatedAt : null,
+            snapshot.SecondaryIndexName,
+            "Count subscription",
+            "Count",
+            summary);
+    }
+
+    private static bool IsInactive(string state, DateTimeOffset lastActivity) =>
+        IsActiveState(state) && lastActivity <= DateTimeOffset.UtcNow - IdleThreshold;
+
+    private static bool IsActiveState(string state) => state.Equals("Live", StringComparison.OrdinalIgnoreCase) ||
+        state.Equals("Delivered", StringComparison.OrdinalIgnoreCase) ||
+        state.Equals("CaughtUp", StringComparison.OrdinalIgnoreCase) ||
+        state.Equals("Counting", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAttentionState(ConnectionRow row) =>
+        row.State.Equals("Faulted", StringComparison.OrdinalIgnoreCase) ||
+        row.State.Equals("Failed", StringComparison.OrdinalIgnoreCase) ||
+        row.IsIdle;
+
+    private static int GetAttentionPriority(ConnectionRow row) => row.State.ToLowerInvariant() switch
+    {
+        "faulted" or "failed" => 0,
+        "idle" => 1,
+        "starting" => 2,
+        "live" or "delivered" or "counting" => 3,
+        "caughtup" => 4,
+        "stopped" => 5,
+        _ => 6
+    };
+
+    private static bool MatchesState(ConnectionRow row, string stateFilter) => stateFilter switch
+    {
+        "NeedsAttention" => IsAttentionState(row),
+        "All" => true,
+        _ => string.Equals(row.State, stateFilter, StringComparison.OrdinalIgnoreCase)
+    };
+
+    private void ClearFilters()
+    {
+        _search = string.Empty;
+        _stateFilter = "NeedsAttention";
+        _typeFilter = "All";
+    }
+
+    private void ShowAllConnections() => _stateFilter = "All";
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration < TimeSpan.Zero)
+        {
+            duration = TimeSpan.Zero;
+        }
+
+        if (duration.TotalHours >= 1)
+        {
+            return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+        }
+
+        return duration.TotalMinutes >= 1
+            ? $"{(int)duration.TotalMinutes}m {duration.Seconds}s"
+            : $"{Math.Max(1, (int)duration.TotalSeconds)}s";
+    }
+
+    private static string GetStateClass(string state) => state.ToLowerInvariant() switch
+    {
+        "caughtup" => "badge badge-success",
+        "live" => "badge badge-info",
+        "counting" => "badge badge-warning",
+        "starting" => "badge badge-muted",
+        "stopped" => "badge badge-muted",
+        "idle" => "badge badge-warning",
+        "faulted" or "failed" => "badge badge-danger",
+        _ => "badge badge-info"
+    };
+
+    private static string GetCardClass(string state) => state.ToLowerInvariant() switch
+    {
+        "faulted" or "failed" => "connection-card-faulted",
+        "idle" => "connection-card-idle",
+        "stopped" => "connection-card-stopped",
+        _ => "connection-card-healthy"
+    };
+
+    private static string GetSummaryClass(string state) => state.ToLowerInvariant() switch
+    {
+        "faulted" or "failed" => "connection-summary-error",
+        "idle" => "connection-summary-idle",
+        _ => string.Empty
+    };
 
     private static string BuildCountWorkerHint(CountWorkerStatusSnapshot snapshot)
     {
@@ -280,51 +433,34 @@
                 : $"The count worker attempted subscriptions and at least one failed: {snapshot.LastError}";
         }
 
-        return "The count worker has started independent subscriptions. If the table is still empty, refresh again in a second or two.";
+        return "The count worker has started independent subscriptions. If the list is still empty, refresh again shortly.";
     }
 
-    private static string GetStateClass(string state) => state.ToLowerInvariant() switch
-    {
-        "caughtup" => "badge badge-success",
-        "live" => "badge badge-info",
-        "counting" => "badge badge-warning",
-        "starting" => "badge badge-muted",
-        "stopped" => "badge badge-muted",
-        "faulted" => "badge badge-danger",
-        _ => "badge badge-info"
-    };
-
-    private sealed record LiveConnectionRow(
+    private sealed record ConnectionRow(
         string SubscriptionId,
-        long ProcessedCount,
         string LastEventId,
-        string LastStreamName,
-        string LastEventType,
-        DateTimeOffset? LastEventAt,
-        string State,
-        string? FailureReason,
-        string StateClass)
-    {
-        public string UpdatedAtDisplay => LastEventAt is null ? "n/a" : LastEventAt.Value.ToString("HH:mm:ss", CultureInfo.CurrentCulture);
-        public string ProcessedCountDisplay => ProcessedCount.ToString(CultureInfo.CurrentCulture);
-    }
-
-    private sealed record CountConnectionRow(
-        string SubscriptionId,
-        string SecondaryIndexName,
-        string State,
-        long TotalCount,
-        bool IsCaughtUp,
-        long? LastCommitPosition,
-        string? LastEventId,
         string? LastStreamName,
         string? LastEventType,
-        DateTimeOffset UpdatedAt,
+        DateTimeOffset? UpdatedAt,
+        string State,
         string? FailureReason,
-        string StateClass)
+        long? ProcessedCount,
+        long? TotalCount,
+        long? CommitPosition,
+        bool IsIdle,
+        TimeSpan? IdleDuration,
+        string? SecondaryIndexName,
+        string ConnectionType,
+        string TypeKey,
+        string Summary)
     {
-        public string CommitPositionDisplay => LastCommitPosition?.ToString(CultureInfo.CurrentCulture) ?? "n/a";
-        public string UpdatedAtDisplay => UpdatedAt.ToString("HH:mm:ss", CultureInfo.CurrentCulture);
+        public string StateClass => GetStateClass(this.State);
+        public string CardClass => GetCardClass(this.State);
+        public string SummaryClass => GetSummaryClass(this.State);
+        public string DisplayName => string.IsNullOrWhiteSpace(this.SecondaryIndexName)
+            ? this.SubscriptionId
+            : $"{this.SecondaryIndexName} → {this.SubscriptionId}";
+        public string SearchableText => $"{this.SubscriptionId} {this.SecondaryIndexName} {this.LastEventId} {this.LastStreamName} {this.LastEventType} {this.FailureReason} {this.State}";
     }
 
     public async ValueTask DisposeAsync()
@@ -344,3 +480,4 @@
         _refreshCts.Dispose();
     }
 }
+
