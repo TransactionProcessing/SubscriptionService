@@ -1339,3 +1339,29 @@ button {
         font-size: 2rem;
     }
 }
+.connection-summary {
+        flex-wrap: wrap;
+    }
+
+    .connection-summary-item {
+        flex: 1 1 145px;
+    }
+
+    .connection-card {
+        padding-right: 12px;
+        padding-left: 15px;
+    }
+
+    .connection-card-heading {
+        align-items: flex-start;
+    }
+
+    .connection-age {
+        flex-basis: 100%;
+        margin-left: 0;
+    }
+
+    .connection-card-meta {
+        gap: 6px 12px;
+    }
+}
