@@ -30,7 +30,11 @@ public sealed record DashboardSubscriptionCard(
     long? CommitPosition,
     string? ProgressDisplay,
     DateTimeOffset? LatestParkedAt,
-    string? LatestParkedFailureReason);
+    string? LatestParkedFailureReason)
+    {
+        public int? EndpointId { get; init; }
+        public string? EndpointName { get; init; }
+    }
 
 public sealed record EndpointViewModel(int EndpointId, string Name, string Url, string? AuthenticationScheme);
 
