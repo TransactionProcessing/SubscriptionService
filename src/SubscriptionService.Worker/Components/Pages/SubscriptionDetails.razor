@@ -394,9 +394,15 @@ else if (Details is not null)
                 try
                 {
                     var snapshot = await Admin.GetLatestDeliverySnapshotAsync(subscriptionId, cancellationToken);
+                    var replayStatus = await Admin.GetReplayStatusAsync(subscriptionId, cancellationToken);
                     await InvokeAsync(() =>
                     {
                         _lastDeliverySnapshot = snapshot;
+                        if (Details is not null && string.Equals(Details.Subscription.SubscriptionId, subscriptionId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Details = Details with { ReplayStatus = replayStatus };
+                        }
+
                         StateHasChanged();
                     });
                 }
