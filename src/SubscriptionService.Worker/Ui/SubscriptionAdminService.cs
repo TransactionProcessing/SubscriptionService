@@ -44,16 +44,36 @@ public sealed class SubscriptionAdminService(
     {
         var subscriptionsTask = configurationStore.GetSubscriptionsAsync(cancellationToken);
         var statusesTask = statusService.GetAllAsync(cancellationToken);
-        await Task.WhenAll(subscriptionsTask, statusesTask);
+        var endpointsTask = endpointStore.GetAllAsync(cancellationToken);
+        await Task.WhenAll(subscriptionsTask, statusesTask, endpointsTask);
 
         var subscriptions = subscriptionsTask.Result;
         var statuses = statusesTask.Result.ToDictionary(x => x.SubscriptionId, StringComparer.OrdinalIgnoreCase);
+        var endpointsById = endpointsTask.Result.ToDictionary(x => x.EndpointId);
+        var endpointsByUrl = endpointsTask.Result
+            .Where(endpoint => !string.IsNullOrWhiteSpace(endpoint.Url))
+            .GroupBy(endpoint => endpoint.Url, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderBy(endpoint => endpoint.Name, StringComparer.OrdinalIgnoreCase).First(),
+                StringComparer.OrdinalIgnoreCase);
 
         var cards = subscriptions
             .OrderBy(x => x.SubscriptionId)
             .Select(subscription =>
             {
                 statuses.TryGetValue(subscription.SubscriptionId, out var status);
+                EndpointDefinition? endpoint = null;
+                if (subscription.EndpointId is int endpointId)
+                {
+                    endpointsById.TryGetValue(endpointId, out endpoint);
+                }
+
+                if (endpoint is null)
+                {
+                    endpointsByUrl.TryGetValue(subscription.EndpointUrl, out endpoint);
+                }
+
                 var runtimeProcessedCount = runtimeRegistry.Get(subscription.SubscriptionId)?.GetProcessedCount();
                 var processedCount = runtimeProcessedCount ?? status?.ProcessedCount ?? 0;
                 return new DashboardSubscriptionCard(
@@ -73,7 +93,11 @@ public sealed class SubscriptionAdminService(
                     status?.CommitPosition,
                     BuildProgressDisplay(processedCount, status?.TotalEventsInSubscription ?? 0),
                     status?.LatestParkedAt,
-                    status?.LatestParkedFailureReason);
+                    status?.LatestParkedFailureReason)
+                {
+                    EndpointId = endpoint?.EndpointId ?? subscription.EndpointId,
+                    EndpointName = endpoint?.Name
+                };
             })
             .ToArray();
 

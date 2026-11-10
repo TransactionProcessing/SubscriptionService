@@ -37,35 +37,20 @@ else if (!string.IsNullOrWhiteSpace(_error))
 }
 else if (_model is not null)
 {
-    <section class="dashboard-attention panel">
-        <div class="attention-icon">✓</div>
-        <div>
-            <strong>@AttentionHeading</strong>
-            <span class="muted">@AttentionDetail</span>
+    <section class="dashboard-summary panel" aria-label="Subscription overview">
+        <div class="dashboard-attention">
+            <div class="attention-icon @(_model.ParkedEvents > 0 ? "attention-needed" : "attention-clear")">@(_model.ParkedEvents > 0 ? "!" : "✓")</div>
+            <div class="attention-copy">
+                <strong>@AttentionHeading</strong>
+                <span class="muted">@AttentionDetail</span>
+            </div>
         </div>
-    </section>
-
-    <section class="stats-grid">
-        <article class="stat-card panel">
-            <span class="stat-label">Subscriptions</span>
-            <strong>@_model.TotalSubscriptions</strong>
-            <span class="stat-foot">Configured in the service</span>
-        </article>
-        <article class="stat-card panel">
-            <span class="stat-label">Running</span>
-            <strong>@_model.RunningSubscriptions</strong>
-            <span class="stat-foot">Background workers active</span>
-        </article>
-        <article class="stat-card panel">
-            <span class="stat-label">Replaying</span>
-            <strong>@_model.ReplayingSubscriptions</strong>
-            <span class="stat-foot">Current replay sessions</span>
-        </article>
-        <article class="stat-card panel">
-            <span class="stat-label">Parked events</span>
-            <strong>@_model.ParkedEvents</strong>
-            <span class="stat-foot">Awaiting attention</span>
-        </article>
+        <div class="summary-metrics">
+            <div class="summary-metric"><strong>@_model.TotalSubscriptions</strong><span>Subscriptions</span></div>
+            <div class="summary-metric"><strong>@_model.RunningSubscriptions</strong><span>Running</span></div>
+            <div class="summary-metric"><strong>@_model.ReplayingSubscriptions</strong><span>Replaying</span></div>
+            <div class="summary-metric summary-metric-attention"><strong>@_model.ParkedEvents</strong><span>Parked</span></div>
+        </div>
     </section>
 
     <section class="panel subscriptions-panel">
@@ -108,43 +93,61 @@ else if (_model is not null)
         }
         else
         {
-            <div class="subscription-list">
-                @foreach (var item in FilteredSubscriptions)
+            <div class="subscription-groups">
+                @foreach (var group in SubscriptionsByEndpoint)
+                {
+                    <section class="endpoint-group">
+                        <header class="endpoint-group-header">
+                            <button type="button" class="endpoint-group-toggle" aria-expanded="@(!IsEndpointCollapsed(group.Key))" aria-label="@EndpointGroupActionLabel(group)" @onclick="() => ToggleEndpointGroup(group.Key)">
+                                <span class="endpoint-group-heading">
+                                    <span class="eyebrow">Endpoint</span>
+                                    <span class="endpoint-group-name" role="heading" aria-level="3">@group.Name</span>
+                                    @if (!string.IsNullOrWhiteSpace(group.Url))
+                                    {
+                                        <span class="endpoint-group-url">@group.Url</span>
+                                    }
+                                </span>
+                                <span class="endpoint-group-count">@group.Subscriptions.Count @(group.Subscriptions.Count == 1 ? "subscription" : "subscriptions")</span>
+                                <span class="endpoint-group-chevron" aria-hidden="true">@(IsEndpointCollapsed(group.Key) ? "▸" : "▾")</span>
+                            </button>
+                        </header>
+                        <div class="subscription-list" hidden="@IsEndpointCollapsed(group.Key)">
+                @foreach (var item in group.Subscriptions)
                 {
                     <article class="subscription-row">
                         <div class="subscription-identity">
                             <a class="subscription-name" href="@($"/admin/subscriptions/{item.SubscriptionId}")">@FriendlyName(item)</a>
-                            <div class="subscription-details">Tag: @item.Tag <span>·</span> Endpoint: @item.EndpointUrl</div>
-                            <div class="generated-id-actions">
-                                <button class="link-button" @onclick="() => ToggleId(item.SubscriptionId)">
-                                    @(IsIdVisible(item.SubscriptionId) ? "Hide generated ID" : "View generated ID")
-                                </button>
-                                <button class="button button-ghost button-compact" @onclick="() => CopySubscriptionIdAsync(item.SubscriptionId)">Copy</button>
-                            </div>
                             @if (IsIdVisible(item.SubscriptionId))
                             {
                                 <div class="generated-id-value" title="@item.SubscriptionId">@item.SubscriptionId</div>
                             }
-                            <div class="subscription-status"><span class="@GetHealthClass(item.Health)">@item.Health</span><span>·</span>@(item.IsRunning ? "Running" : "Stopped")</div>
-                            <div class="subscription-event-logging"><span class="@(item.EnableEventLogging ? "badge badge-success" : "badge badge-muted")">Event logging: @(item.EnableEventLogging ? "On" : "Off")</span></div>
                         </div>
-                        <div class="subscription-stat"><span>Rate</span><strong>@FormatRate(item.SubscriptionId)</strong></div>
-                        <div class="subscription-stat"><span>Progress</span><strong>@(item.ProgressDisplay ?? "No count yet")</strong><div class="progress-bar"><span style="@GetProgressStyle(item.ProgressDisplay)"></span></div></div>
-                        <div class="subscription-stat"><span>Parked</span><strong>@item.ParkedEventCount</strong><small>@DisplayDate(item.LatestParkedAt)</small></div>
+                        <div class="subscription-status-stat">
+                            <span class="@GetHealthClass(item.Health)">@item.Health</span>
+                            <span class="runtime-state">@(item.IsRunning ? "Running" : "Stopped")</span>
+                        </div>
+                        <div class="subscription-stat progress-stat"><span>Progress</span><strong>@(item.ProgressDisplay ?? "No count yet")</strong><div class="progress-bar"><span style="@GetProgressStyle(item.ProgressDisplay)"></span></div></div>
+                        <div class="subscription-stat parked-stat"><span>Parked</span><strong>@item.ParkedEventCount</strong></div>
                         <div class="subscription-actions">
-                            <a class="button button-ghost button-compact" href="@($"/admin/subscriptions/{item.SubscriptionId}")">View</a>
-                            <a class="button button-ghost button-compact" href="@($"/admin/subscriptions/{item.SubscriptionId}/edit")">Edit</a>
-                            <button class="button button-secondary button-compact" @onclick="() => ToggleEnabledAsync(item)" disabled="@_busyIds.Contains(item.SubscriptionId)">@(item.Enabled && item.OperationalState == SubscriptionOperationalState.Healthy ? "Stop" : "Start")</button>
-                            <button type="button" class="button button-ghost button-compact more-button" aria-label="More actions" @onclick="() => ToggleMenu(item.SubscriptionId)">•••</button>
+                            <button class="button button-primary button-compact" @onclick="() => ToggleEnabledAsync(item)" disabled="@_busyIds.Contains(item.SubscriptionId)">@(item.Enabled && item.OperationalState == SubscriptionOperationalState.Healthy ? "Stop" : "Start")</button>
+                            <button type="button" class="button button-ghost button-compact actions-menu-button" aria-haspopup="true" aria-expanded="@IsMenuOpen(item.SubscriptionId)" aria-label="Actions for @FriendlyName(item)" @onclick="() => ToggleMenu(item.SubscriptionId)">Actions <span aria-hidden="true">▾</span></button>
                             @if (_openMenuId == item.SubscriptionId)
                             {
-                                <div class="subscription-menu">
-                                    <button type="button" @onclick="() => TriggerReplayAsync(item.SubscriptionId)">Replay now</button>
+                                <div class="subscription-menu" role="group" aria-label="Actions for @FriendlyName(item)">
+                                    <a href="@($"/admin/subscriptions/{item.SubscriptionId}/edit")">Edit subscription</a>
+                                    <button type="button" @onclick="() => ToggleId(item.SubscriptionId)">
+                                        @(IsIdVisible(item.SubscriptionId) ? "Hide generated ID" : "View generated ID")
+                                    </button>
+                                    <button type="button" @onclick="() => CopySubscriptionIdAsync(item.SubscriptionId)">Copy subscription ID</button>
+                                    <button type="button" @onclick="() => TriggerReplayFromMenuAsync(item.SubscriptionId)">Replay now</button>
                                     <button type="button" class="danger-menu-item" @onclick="() => DeleteSubscriptionAsync(item.SubscriptionId)">@(_pendingDeleteId == item.SubscriptionId ? "Confirm delete" : "Delete subscription")</button>
                                 </div>
                             }
                         </div>
                     </article>
+                }
+                        </div>
+                    </section>
                 }
             </div>
         }
@@ -166,8 +169,6 @@ else if (_model is not null)
     private string? _toast;
     private string? _pendingDeleteId;
     private readonly HashSet<string> _busyIds = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, RateSample> _rateSamples = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, double> _rates = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _refreshCts = new();
     private Task? _refreshLoop;
 
@@ -183,10 +184,11 @@ else if (_model is not null)
     private bool _parkedOnly;
     private string? _openMenuId;
     private string? _visibleId;
+    private readonly HashSet<string> _collapsedEndpointGroupKeys = new(StringComparer.Ordinal);
 
     private IEnumerable<DashboardSubscriptionCard> FilteredSubscriptions => (_model?.Subscriptions ?? [])
         .Where(item => string.IsNullOrWhiteSpace(_search) ||
-            $"{item.SubscriptionId} {item.SecondaryIndexName} {item.EndpointUrl} {item.Tag}".Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase))
+            $"{item.SubscriptionId} {item.SecondaryIndexName} {item.EndpointName} {item.EndpointUrl} {item.Tag}".Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase))
         .Where(item => string.Equals(_statusFilter, "All", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(item.Health, _statusFilter, StringComparison.OrdinalIgnoreCase))
         .Where(item => !_parkedOnly || item.ParkedEventCount > 0)
@@ -197,6 +199,34 @@ else if (_model is not null)
             _ => item.LatestParkedAt.HasValue ? "0" : "1"
         })
         .ThenBy(item => FriendlyName(item));
+
+    private IEnumerable<EndpointSubscriptionGroup> SubscriptionsByEndpoint => FilteredSubscriptions
+        .GroupBy(item => item.EndpointId is int endpointId ? $"endpoint:{endpointId}" : $"url:{item.EndpointUrl}", StringComparer.Ordinal)
+        .Select(group =>
+        {
+            var firstSubscription = group.First();
+            return new EndpointSubscriptionGroup(
+                group.Key,
+                string.IsNullOrWhiteSpace(firstSubscription.EndpointName) ? "Unassigned endpoint" : firstSubscription.EndpointName,
+                firstSubscription.EndpointUrl,
+                group.ToArray());
+        })
+        .OrderBy(group => group.Name, StringComparer.CurrentCultureIgnoreCase)
+        .ThenBy(group => group.Name, StringComparer.CurrentCulture)
+        .ThenBy(group => group.Url, StringComparer.OrdinalIgnoreCase);
+
+    private string EndpointGroupActionLabel(EndpointSubscriptionGroup group) =>
+        $"{(IsEndpointCollapsed(group.Key) ? "Expand" : "Collapse")} {group.Name}, {group.Subscriptions.Count} {(group.Subscriptions.Count == 1 ? "subscription" : "subscriptions")}";
+
+    private bool IsEndpointCollapsed(string key) => _collapsedEndpointGroupKeys.Contains(key);
+
+    private void ToggleEndpointGroup(string key)
+    {
+        if (!_collapsedEndpointGroupKeys.Add(key))
+        {
+            _collapsedEndpointGroupKeys.Remove(key);
+        }
+    }
 
     private string AttentionHeading => _model?.ParkedEvents > 0
         ? $@"{_model.ParkedEvents} parked events need attention"
@@ -215,14 +245,27 @@ else if (_model is not null)
 
     private bool IsIdVisible(string subscriptionId) => string.Equals(_visibleId, subscriptionId, StringComparison.OrdinalIgnoreCase);
 
-    private void ToggleId(string subscriptionId) => _visibleId = IsIdVisible(subscriptionId) ? null : subscriptionId;
+    private void ToggleId(string subscriptionId)
+    {
+        _visibleId = IsIdVisible(subscriptionId) ? null : subscriptionId;
+        _openMenuId = null;
+    }
 
-    private void ToggleMenu(string subscriptionId) => _openMenuId = string.Equals(_openMenuId, subscriptionId, StringComparison.OrdinalIgnoreCase) ? null : subscriptionId;
+    private bool IsMenuOpen(string subscriptionId) => string.Equals(_openMenuId, subscriptionId, StringComparison.OrdinalIgnoreCase);
+
+    private void ToggleMenu(string subscriptionId) => _openMenuId = IsMenuOpen(subscriptionId) ? null : subscriptionId;
 
     private async Task CopySubscriptionIdAsync(string subscriptionId)
     {
         await Js.InvokeVoidAsync("navigator.clipboard.writeText", subscriptionId);
+        _openMenuId = null;
         _toast = "Generated subscription ID copied.";
+    }
+
+    private async Task TriggerReplayFromMenuAsync(string subscriptionId)
+    {
+        _openMenuId = null;
+        await TriggerReplayAsync(subscriptionId);
     }
 
     protected override async Task OnInitializedAsync()
@@ -242,7 +285,6 @@ else if (_model is not null)
         try
         {
             _model = await Admin.GetDashboardAsync();
-            UpdateRates(_model);
         }
         catch (Exception ex)
         {
@@ -358,37 +400,6 @@ else if (_model is not null)
         }
     }
 
-    private void UpdateRates(DashboardViewModel model)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var activeIds = model.Subscriptions.Select(x => x.SubscriptionId).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var item in model.Subscriptions)
-        {
-            if (_rateSamples.TryGetValue(item.SubscriptionId, out var previous))
-            {
-                var elapsedSeconds = (now - previous.Timestamp).TotalSeconds;
-                if (elapsedSeconds > 0)
-                {
-                    _rates[item.SubscriptionId] = Math.Max(0, (item.ProcessedCount - previous.ProcessedCount) / elapsedSeconds);
-                }
-            }
-
-            _rateSamples[item.SubscriptionId] = new RateSample(item.ProcessedCount, now);
-        }
-
-        foreach (var staleId in _rateSamples.Keys.Where(id => !activeIds.Contains(id)).ToArray())
-        {
-            _rateSamples.Remove(staleId);
-            _rates.Remove(staleId);
-        }
-    }
-
-    private string FormatRate(string subscriptionId) =>
-        _rates.TryGetValue(subscriptionId, out var rate)
-            ? $"{rate.ToString("N1", CultureInfo.CurrentCulture)} msg/s"
-            : "—";
-
     private static string GetHealthClass(string health) => health.ToLowerInvariant() switch
     {
         "healthy" => "badge badge-success",
@@ -415,12 +426,6 @@ else if (_model is not null)
         return "width: 24%;";
     }
 
-    private static string DisplayValue(long? value) => value.HasValue ? value.Value.ToString("N0", CultureInfo.InvariantCulture) : "n/a";
-
-    private static string DisplayDate(DateTimeOffset? value) => value is null
-        ? "n/a"
-        : value.Value.ToLocalTime().ToString("dd MMM yyyy HH:mm", CultureInfo.CurrentCulture);
-
     public async ValueTask DisposeAsync()
     {
         _refreshCts.Cancel();
@@ -438,5 +443,9 @@ else if (_model is not null)
         _refreshCts.Dispose();
     }
 
-    private sealed record RateSample(long ProcessedCount, DateTimeOffset Timestamp);
+    private sealed record EndpointSubscriptionGroup(
+        string Key,
+        string Name,
+        string Url,
+        IReadOnlyList<DashboardSubscriptionCard> Subscriptions);
 }
