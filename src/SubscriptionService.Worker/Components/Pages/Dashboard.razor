@@ -39,11 +39,15 @@ else if (_model is not null)
 {
     <section class="dashboard-summary panel" aria-label="Subscription overview">
         <div class="dashboard-attention">
-            <div class="attention-icon @(_model.ParkedEvents > 0 ? "attention-needed" : "attention-clear")">@(_model.ParkedEvents > 0 ? "!" : "✓")</div>
+            <div class="attention-icon @(HasAttention ? "attention-needed" : "attention-clear")">@(HasAttention ? "!" : "✓")</div>
             <div class="attention-copy">
                 <strong>@AttentionHeading</strong>
                 <span class="muted">@AttentionDetail</span>
             </div>
+            @if (_model.ParkedEvents > 0)
+            {
+                <button class="button button-secondary button-compact attention-action" @onclick="ShowAffectedSubscriptions">Show affected subscriptions</button>
+            }
         </div>
         <div class="summary-metrics">
             <div class="summary-metric"><strong>@_model.TotalSubscriptions</strong><span>Subscriptions</span></div>
@@ -66,9 +70,8 @@ else if (_model is not null)
         <div class="subscription-filters">
             <input type="search" class="input" placeholder="Search by index, endpoint or tag…" @bind="_search" @bind:event="oninput" />
             <select class="input input-filter" @bind="_statusFilter">
-                <option value="All">All statuses</option>
-                <option value="Healthy">Healthy</option>
-                <option value="Replaying">Replaying</option>
+                <option value="All">All runtime states</option>
+                <option value="Running">Running</option>
                 <option value="Stopped">Stopped</option>
                 <option value="Faulted">Faulted</option>
             </select>
@@ -123,11 +126,25 @@ else if (_model is not null)
                             }
                         </div>
                         <div class="subscription-status-stat">
-                            <span class="@GetHealthClass(item.Health)">@item.Health</span>
-                            <span class="runtime-state">@(item.IsRunning ? "Running" : "Stopped")</span>
+                            <span class="subscription-stat-label">Runtime</span>
+                            <span class="runtime-state @GetRuntimeClass(item)">@GetRuntimeState(item)</span>
+                        </div>
+                        <div class="subscription-status-stat delivery-health-stat">
+                            <span class="subscription-stat-label">Delivery health</span>
+                            <span class="delivery-health @(item.ParkedEventCount > 0 ? "delivery-health-warning" : "")">@(item.ParkedEventCount > 0 ? "Needs attention" : "No parked events")</span>
                         </div>
                         <div class="subscription-stat progress-stat"><span>Progress</span><strong>@(item.ProgressDisplay ?? "No count yet")</strong><div class="progress-bar"><span style="@GetProgressStyle(item.ProgressDisplay)"></span></div></div>
-                        <div class="subscription-stat parked-stat"><span>Parked</span><strong>@item.ParkedEventCount</strong></div>
+                        <div class="subscription-stat parked-stat">
+                            <span>Parked events</span>
+                            @if (item.ParkedEventCount > 0)
+                            {
+                                <a class="parked-count-link" href="@($"/admin/subscriptions/{item.SubscriptionId}#parked-events")" aria-label="Review @item.ParkedEventCount parked events for @FriendlyName(item)">@item.ParkedEventCount</a>
+                            }
+                            else
+                            {
+                                <strong>0</strong>
+                            }
+                        </div>
                         <div class="subscription-actions">
                             <button class="button button-primary button-compact" @onclick="() => ToggleEnabledAsync(item)" disabled="@_busyIds.Contains(item.SubscriptionId)">@(item.Enabled && item.OperationalState == SubscriptionOperationalState.Healthy ? "Stop" : "Start")</button>
                             <button type="button" class="button button-ghost button-compact actions-menu-button" aria-haspopup="true" aria-expanded="@IsMenuOpen(item.SubscriptionId)" aria-label="Actions for @FriendlyName(item)" @onclick="() => ToggleMenu(item.SubscriptionId)">Actions <span aria-hidden="true">▾</span></button>
@@ -190,7 +207,7 @@ else if (_model is not null)
         .Where(item => string.IsNullOrWhiteSpace(_search) ||
             $"{item.SubscriptionId} {item.SecondaryIndexName} {item.EndpointName} {item.EndpointUrl} {item.Tag}".Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase))
         .Where(item => string.Equals(_statusFilter, "All", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(item.Health, _statusFilter, StringComparison.OrdinalIgnoreCase))
+            string.Equals(GetRuntimeState(item), _statusFilter, StringComparison.OrdinalIgnoreCase))
         .Where(item => !_parkedOnly || item.ParkedEventCount > 0)
         .OrderBy(item => _sortBy switch
         {
@@ -228,13 +245,38 @@ else if (_model is not null)
         }
     }
 
+    private int FaultedWorkerCount => _model?.Subscriptions.Count(item => GetRuntimeState(item) == "Faulted") ?? 0;
+    private bool HasAttention => (_model?.ParkedEvents ?? 0) > 0 || FaultedWorkerCount > 0;
+
     private string AttentionHeading => _model?.ParkedEvents > 0
         ? $@"{_model.ParkedEvents} parked events need attention"
-        : "All subscriptions are healthy";
+        : FaultedWorkerCount > 0
+            ? $@"{FaultedWorkerCount} workers need attention"
+            : "All subscriptions are healthy";
 
     private string AttentionDetail => _model?.ParkedEvents > 0
-        ? "Review parked events from the affected subscription details."
-        : "No parked events or failed workers detected · Updated just now";
+        ? "Delivery failures are isolated to the subscriptions that need attention."
+        : FaultedWorkerCount > 0
+            ? "Open the affected subscriptions to review worker faults."
+            : "No parked events or failed workers detected · Updated just now";
+
+    private void ShowAffectedSubscriptions()
+    {
+        _parkedOnly = true;
+        _statusFilter = "All";
+    }
+
+    private static string GetRuntimeState(DashboardSubscriptionCard item) =>
+        string.Equals(item.Health, "Faulted", StringComparison.OrdinalIgnoreCase)
+            ? "Faulted"
+            : item.IsRunning ? "Running" : "Stopped";
+
+    private static string GetRuntimeClass(DashboardSubscriptionCard item) => GetRuntimeState(item).ToLowerInvariant() switch
+    {
+        "running" => "runtime-running",
+        "faulted" => "runtime-faulted",
+        _ => "runtime-stopped"
+    };
 
     private static string FriendlyName(DashboardSubscriptionCard item)
     {
@@ -399,15 +441,6 @@ else if (_model is not null)
             _busyIds.Remove(subscriptionId);
         }
     }
-
-    private static string GetHealthClass(string health) => health.ToLowerInvariant() switch
-    {
-        "healthy" => "badge badge-success",
-        "replaying" => "badge badge-warning",
-        "stopped" => "badge badge-muted",
-        "faulted" => "badge badge-danger",
-        _ => "badge badge-info"
-    };
 
     private static string GetProgressStyle(string? progressDisplay)
     {

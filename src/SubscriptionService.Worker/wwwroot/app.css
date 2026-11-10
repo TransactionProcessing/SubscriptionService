@@ -596,6 +596,11 @@ button {
     min-width: 0;
 }
 
+.attention-action {
+    flex: 0 0 auto;
+    margin-left: 8px;
+}
+
 .attention-copy {
     min-width: 0;
 }
@@ -784,7 +789,7 @@ button {
 .subscription-row {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(260px, 1.8fr) minmax(100px, .7fr) minmax(150px, 1fr) minmax(55px, .4fr) auto;
+    grid-template-columns: minmax(230px, 1.7fr) minmax(100px, .65fr) minmax(145px, .95fr) minmax(140px, .9fr) minmax(70px, .4fr) auto;
     align-items: center;
     gap: 16px;
     padding: 18px;
@@ -830,8 +835,60 @@ button {
 }
 
 .runtime-state {
+    color: var(--text);
+    font-size: .8rem;
+}
+
+.subscription-stat-label {
+    color: var(--muted);
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+}
+
+.runtime-state::before {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 7px;
+    border-radius: 50%;
+    background: #94a3b8;
+    content: "";
+    vertical-align: 1px;
+}
+
+.runtime-state.runtime-running::before {
+    background: var(--success);
+}
+
+.runtime-state.runtime-faulted::before {
+    background: var(--danger);
+}
+
+.delivery-health {
     color: var(--muted);
     font-size: .8rem;
+}
+
+.delivery-health-warning {
+    color: #ffd078;
+    font-weight: 700;
+}
+
+.parked-count-link {
+    width: fit-content;
+    color: #ffd078;
+    font-size: 1rem;
+    font-weight: 750;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 208, 120, .55);
+    text-underline-offset: 3px;
+}
+
+.parked-count-link:hover,
+.parked-count-link:focus-visible {
+    color: #fff0c9;
 }
 
 .subscription-stat {
@@ -912,8 +969,28 @@ button {
 
 @media (max-width: 1100px) {
     .subscription-row {
-        grid-template-columns: minmax(210px, 1.5fr) minmax(92px, .7fr) minmax(120px, 1fr) minmax(48px, .4fr) auto;
+        grid-template-columns: minmax(190px, 1.35fr) minmax(85px, .65fr) minmax(118px, .9fr) minmax(125px, .9fr) minmax(50px, .4fr) auto;
         gap: 12px;
+    }
+}
+
+@media (max-width: 1000px) {
+    .subscription-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 14px 16px;
+    }
+
+    .subscription-identity,
+    .progress-stat,
+    .subscription-actions {
+        grid-column: 1 / -1;
+    }
+
+    .parked-stat {
+        grid-column: 2;
+        grid-row: auto;
+        justify-items: end;
+        text-align: right;
     }
 }
 
@@ -945,7 +1022,7 @@ button {
 
     .parked-stat {
         grid-column: 2;
-        grid-row: 2;
+        grid-row: auto;
         justify-items: end;
         text-align: right;
     }
