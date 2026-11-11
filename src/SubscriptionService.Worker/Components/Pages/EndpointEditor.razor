@@ -1,0 +1,126 @@
+@page "/admin/endpoints/new"
+@page "/admin/endpoints/{EndpointId:int}/edit"
+@inject SubscriptionAdminService Admin
+@inject NavigationManager Navigation
+
+<PageTitle>@PageTitleText</PageTitle>
+
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">Configuration · Endpoints</p>
+        <h1>@PageTitleText</h1>
+        <p class="muted">Set the delivery destination and optional authentication settings.</p>
+    </div>
+    <div class="hero-actions"><a class="button button-secondary" href="/admin/endpoints">Back to endpoints</a></div>
+</section>
+
+@if (_model is null)
+{
+    <section class="panel alert-panel"><h2>Endpoint not found.</h2></section>
+}
+else
+{
+    <EditForm Model="_model" OnValidSubmit="SaveAsync" class="form-card panel">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        @if (_error is not null) { <div class="inline-alert danger">@_error</div> }
+        <div class="form-grid">
+            <section class="form-section">
+                <div>
+                    <p class="eyebrow">Destination</p>
+                    <h2>Delivery target</h2>
+                    <p class="field-help">Choose a recognizable name and the URL that receives subscription events.</p>
+                </div>
+                <label class="field"><span>Name <strong aria-hidden="true">*</strong></span><InputText class="input" @bind-Value="_model.Name" /></label>
+                <label class="field"><span>URL <strong aria-hidden="true">*</strong></span><InputText class="input" @bind-Value="_model.Url" /></label>
+            </section>
+            <section class="form-section endpoint-auth-section">
+                <div>
+                    <p class="eyebrow">Optional</p>
+                    <h2>Authentication</h2>
+                    <p class="field-help">Leave these fields blank when the endpoint does not require authentication.</p>
+                </div>
+                <label class="field"><span>Authentication scheme</span><InputText class="input" @bind-Value="_model.AuthenticationScheme" /></label>
+                <label class="field"><span>Authentication parameters (JSON)</span><InputTextArea class="input textarea mono" @bind-Value="_model.AuthenticationParametersJson" /><small class="field-help">Provide an object containing string values.</small></label>
+                @if (_authenticationError is not null) { <div class="inline-alert danger" role="alert">@_authenticationError</div> }
+            </section>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="button button-primary" disabled="@_saving">@(_saving ? "Saving..." : "Save endpoint")</button>
+            <a class="button button-secondary" href="/admin/endpoints">Cancel</a>
+            @if (!IsCreate) { <button type="button" class="button button-danger" @onclick="DeleteAsync" disabled="@_saving">Delete</button> }
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public int? EndpointId { get; set; }
+
+    private EndpointEditorModel? _model;
+    private string? _error;
+    private string? _authenticationError;
+    private bool _saving;
+
+    private bool IsCreate => EndpointId is null or 0;
+    private string PageTitleText => IsCreate ? "New endpoint" : "Edit endpoint";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _error = null;
+        _authenticationError = null;
+        _model = await Admin.GetEndpointEditorModelAsync(IsCreate ? null : EndpointId);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model is null) return;
+        _error = null;
+        _authenticationError = null;
+        if (!_model.TryCreate(out var endpoint, out var error) || endpoint is null)
+        {
+            _authenticationError = error;
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await Admin.SaveEndpointAsync(endpoint);
+            Navigation.NavigateTo("/admin/endpoints");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_model is null) return;
+        _saving = true;
+        try
+        {
+            if (await Admin.DeleteEndpointAsync(_model.EndpointId))
+            {
+                Navigation.NavigateTo("/admin/endpoints");
+            }
+            else
+            {
+                _error = "The endpoint could not be deleted.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
