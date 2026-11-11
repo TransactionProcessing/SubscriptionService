@@ -7,7 +7,7 @@
         <p class="eyebrow">Configuration</p>
         <h1>@PageHeading</h1>
         <p class="muted">
-            Define the delivery endpoint, retry policy, secondary index naming, and event preview for a subscription.
+            Choose an index and delivery target, then preview matching events before saving.
         </p>
     </div>
 
@@ -35,70 +35,124 @@ else if (!string.IsNullOrWhiteSpace(_error))
 }
 else if (_model is not null)
 {
-    <EditForm Model="@_model" OnValidSubmit="SaveAsync" class="form-card panel">
+    <EditForm Model="@_model" OnValidSubmit="SaveAsync" class="form-card panel subscription-editor-form">
         <DataAnnotationsValidator />
         <ValidationSummary />
+
+        <nav class="subscription-wizard-steps" aria-label="Subscription setup progress">
+            <button type="button" class="wizard-step @(_currentStep == 1 ? "active" : _furthestStep > 1 ? "complete" : null)" aria-current="@(_currentStep == 1 ? "step" : null)" @onclick="() => GoToStep(1)"><span>1</span><strong>Index</strong></button>
+            <span class="wizard-connector @(_furthestStep > 1 ? "complete" : null)" aria-hidden="true"></span>
+            <button type="button" class="wizard-step @(_currentStep == 2 ? "active" : _furthestStep > 2 ? "complete" : null)" aria-current="@(_currentStep == 2 ? "step" : null)" disabled="@(_furthestStep < 2)" @onclick="() => GoToStep(2)"><span>2</span><strong>Delivery</strong></button>
+            <span class="wizard-connector @(_furthestStep > 2 ? "complete" : null)" aria-hidden="true"></span>
+            <button type="button" class="wizard-step @(_currentStep == 3 ? "active" : _furthestStep > 3 ? "complete" : null)" aria-current="@(_currentStep == 3 ? "step" : null)" disabled="@(_furthestStep < 3)" @onclick="() => GoToStep(3)"><span>3</span><strong>Advanced</strong></button>
+            <span class="wizard-connector @(_furthestStep > 3 ? "complete" : null)" aria-hidden="true"></span>
+            <button type="button" class="wizard-step @(_currentStep == 4 ? "active" : null)" aria-current="@(_currentStep == 4 ? "step" : null)" disabled="@(_furthestStep < 4)" @onclick="() => GoToStep(4)"><span>4</span><strong>Preview</strong></button>
+        </nav>
 
         @if (!string.IsNullOrWhiteSpace(_formError))
         {
             <div class="inline-alert">@_formError</div>
         }
 
-        <section class="form-section full-width generated-id-panel">
-            <div>
-                <p class="eyebrow">Generated subscription ID</p>
-                <div class="generated-subscription-id">@(string.IsNullOrWhiteSpace(_model.SubscriptionId) ? "Choose an index and endpoint" : _model.SubscriptionId)</div>
-                <small class="field-help">Built from the index name, endpoint name, and tag.</small>
-            </div>
-            <span class="badge @( _model.Enabled ? "badge-success" : "badge-muted")">@( _model.Enabled ? "Enabled" : "Disabled")</span>
-        </section>
-
-        <div class="form-grid subscription-editor-grid">
-            <section class="form-section">
+        <div class="subscription-editor-layout">
+            <div class="subscription-editor-main">
+            @if (_currentStep == 1)
+            {
+            <section class="form-section editor-panel">
                 <div class="panel-header compact">
                     <div>
-                        <p class="eyebrow">Identity</p>
-                        <h2>Subscription details</h2>
+                        <p class="eyebrow">Step 1 · Identity</p>
+                        <h2>Choose an index</h2>
+                        <p class="field-help">Search by name, then select the event stream this subscription should follow.</p>
                     </div>
                 </div>
 
-                <div class="source-fields">
-                <label class="field">
-                    <span>Secondary index</span>
-                    <InputSelect TValue="string" class="input mono"
-                                 Value="@_selectedIndexName"
-                                 ValueChanged="OnIndexSelectionChanged"
-                                 ValueExpression="() => _selectedIndexName">
-                        <option value="">Select an index</option>
-                        @foreach (var item in _indexOptions)
-                        {
-                            <option value="@item.Name">@($"{item.Name} · {item.StateOrDefault}")</option>
-                        }
-                        <option value="@CustomIndexOption">Enter an index name manually</option>
-                    </InputSelect>
-                    @if (_selectedIndexName == CustomIndexOption)
-                    {
-                        <InputText class="input mono"
-                                   placeholder="Index name to create in KurrentDB"
-                                   Value="@_model.SecondaryIndexName"
-                                   ValueChanged="OnSecondaryIndexChanged"
-                                   ValueExpression="() => _model.SecondaryIndexName" />
-                        <small class="field-help">Enter the name of an index you plan to create in KurrentDB.</small>
-                    }
-                    else
-                    {
-                        <small class="field-help">Select an existing index, or choose the manual option to enter a future index name.</small>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(_indexOptionsError))
-                    {
-                        <div class="inline-alert danger">@_indexOptionsError</div>
-                    }
-                    else if (_indexOptions.Count == 0)
-                    {
-                        <small class="field-help">No indexes are currently available.</small>
-                    }
+                <label class="field index-search-field">
+                    <span class="sr-only">Search indexes</span>
+                    <InputText class="input" type="search" placeholder="Search indexes by name…" @bind-Value="_indexSearch" @bind-Value:event="oninput" />
                 </label>
 
+                <div class="index-filter-tabs" role="group" aria-label="Filter indexes">
+                    <button type="button" class="index-filter-tab @(_indexTypeFilter == "All" ? "active" : null)" aria-pressed="@(_indexTypeFilter == "All")" @onclick="ShowAllIndexes">All indexes <span>@FilteredIndexCount</span></button>
+                    <button type="button" class="index-filter-tab @(_indexTypeFilter == "BuiltIn" ? "active" : null)" aria-pressed="@(_indexTypeFilter == "BuiltIn")" @onclick="ShowBuiltInIndexes">Built-in</button>
+                    <button type="button" class="index-filter-tab @(_indexTypeFilter == "UserDefined" ? "active" : null)" aria-pressed="@(_indexTypeFilter == "UserDefined")" @onclick="ShowUserDefinedIndexes">User-defined</button>
+                </div>
+
+                <div class="index-picker" role="group" aria-label="Secondary index choices">
+                    @if (FilteredBuiltInIndexes.Any())
+                    {
+                        <div class="index-group">
+                            <h3 class="index-group-title">Built-in indexes</h3>
+                            @foreach (var item in FilteredBuiltInIndexes)
+                            {
+                                <button type="button" aria-pressed="@IsIndexSelected(item.Name)" class="index-option @(IsIndexSelected(item.Name) ? "selected" : null)" @onclick="() => OnIndexSelectionChanged(item.Name)">
+                                    <span class="index-radio" aria-hidden="true"></span>
+                                    <span class="index-option-copy"><strong>@item.Name</strong><small>@item.Type · @item.StateOrDefault</small></span>
+                                    <span class="@EventStoreIndexPresentation.GetStateBadgeClass(item.State)">@item.StateOrDefault</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                    @if (FilteredUserIndexes.Any())
+                    {
+                        <div class="index-group">
+                            <h3 class="index-group-title">User-defined indexes</h3>
+                            @foreach (var item in FilteredUserIndexes)
+                            {
+                                <button type="button" aria-pressed="@IsIndexSelected(item.Name)" class="index-option @(IsIndexSelected(item.Name) ? "selected" : null)" @onclick="() => OnIndexSelectionChanged(item.Name)">
+                                    <span class="index-radio" aria-hidden="true"></span>
+                                    <span class="index-option-copy"><strong>@item.Name</strong><small>@item.Type · @item.StateOrDefault</small></span>
+                                    <span class="@EventStoreIndexPresentation.GetStateBadgeClass(item.State)">@item.StateOrDefault</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                    @if (!FilteredIndexes.Any())
+                    {
+                        <p class="index-empty">No indexes match “@_indexSearch”. Try another search or enter an index name below.</p>
+                    }
+                </div>
+
+                <div class="manual-index-toggle">
+                    @if (_selectedIndexName != CustomIndexOption)
+                    {
+                        <button type="button" class="text-button" @onclick="ChooseManualIndex">＋ Enter an index name manually</button>
+                    }
+                    @if (_selectedIndexName == CustomIndexOption)
+                    {
+                        <label class="field manual-index-field">
+                            <span>Index name</span>
+                            <InputText class="input mono" placeholder="Index name to create in KurrentDB" Value="@_model.SecondaryIndexName" ValueChanged="OnSecondaryIndexChanged" ValueExpression="() => _model.SecondaryIndexName" />
+                            <small class="field-help">Enter the name of an index you plan to create in KurrentDB.</small>
+                        </label>
+                    }
+                </div>
+                @if (!HasIndexSelection)
+                {
+                    <small class="field-help">Select an index or enter one manually to continue.</small>
+                }
+                @if (!string.IsNullOrWhiteSpace(_indexOptionsError))
+                {
+                    <div class="inline-alert danger">@_indexOptionsError</div>
+                }
+                else if (_indexOptions.Count == 0)
+                {
+                    <small class="field-help">No indexes are currently available. You can still enter one manually.</small>
+                }
+            </section>
+            }
+
+            @if (_currentStep == 2)
+            {
+            <section class="form-section editor-panel">
+                <div class="panel-header compact">
+                    <div>
+                        <p class="eyebrow">Step 2 · Delivery</p>
+                        <h2>Choose where events go</h2>
+                    </div>
+                </div>
+
+                <div class="source-fields editor-delivery-fields">
                 <label class="field">
                     <span>Delivery endpoint</span>
                     <InputSelect TValue="int" class="input" Value="@_model.EndpointId" ValueChanged="OnEndpointChanged" ValueExpression="() => _model.EndpointId">
@@ -113,6 +167,10 @@ else if (_model is not null)
                     {
                         <a class="button button-secondary" href="/admin/endpoints">Create an endpoint</a>
                     }
+                    @if (_model.EndpointId <= 0)
+                    {
+                        <small class="field-help">Select an endpoint to continue.</small>
+                    }
                 </label>
 
                 <label class="field">
@@ -122,12 +180,16 @@ else if (_model is not null)
                 </label>
                 </div>
             </section>
+            }
 
-            <section class="form-section full-width">
+            @if (_currentStep == 3)
+            {
+            <section class="form-section editor-panel">
                 <div class="panel-header compact">
                     <div>
-                        <p class="eyebrow">Delivery</p>
-                        <h2>Retry and checkpoint settings</h2>
+                        <p class="eyebrow">Step 3 · Optional</p>
+                        <h2>Advanced settings</h2>
+                        <p class="field-help">The defaults are ready to use. Change retry, checkpoint or event handling if needed.</p>
                     </div>
                 </div>
 
@@ -182,13 +244,23 @@ else if (_model is not null)
                     </label>
                 </div>
             </section>
+            }
 
-            <section class="form-section full-width">
+            @if (_currentStep == 4)
+            {
+            <section class="form-section editor-panel" id="preview">
                 <div class="panel-header compact">
                     <div>
-                        <p class="eyebrow">Preview</p>
-                        <h2>Return the first matching events</h2>
+                        <p class="eyebrow">Step 4 · Preview</p>
+                        <h2>Check matching events</h2>
+                        <p class="field-help">Preview runs in memory and does not save or start this subscription.</p>
                     </div>
+                </div>
+
+                <div class="wizard-review-summary">
+                    <div><span>Index</span><strong>@(string.IsNullOrWhiteSpace(_model.SecondaryIndexName) ? "Not selected" : _model.SecondaryIndexName)</strong></div>
+                    <div><span>Endpoint</span><strong>@(_endpointOptions.FirstOrDefault(x => x.EndpointId == _model.EndpointId)?.Name ?? "Not selected")</strong></div>
+                    <div><span>Tag</span><strong>@(string.IsNullOrWhiteSpace(_model.Tag) ? "None" : _model.Tag)</strong></div>
                 </div>
 
                 <div class="filter-row">
@@ -202,8 +274,6 @@ else if (_model is not null)
                         @(_previewing ? "Loading preview..." : $"Preview first {_previewCount} events")
                     </button>
                 </div>
-
-                <p class="field-help">This preview runs an in-memory catch-up subscription and does not save anything.</p>
 
                 @if (!string.IsNullOrWhiteSpace(_previewError))
                 {
@@ -246,24 +316,53 @@ else if (_model is not null)
                     }
                 }
             </section>
+            }
+            </div>
 
+            <aside class="generated-id-panel editor-id-panel" aria-live="polite">
+                <p class="eyebrow">Live summary</p>
+                <h2>Generated subscription ID</h2>
+                <p class="field-help">@(IsCreate ? "Updates as your index, endpoint and tag change." : "The saved subscription ID stays fixed while editing.")</p>
+                <div class="generated-id-box">
+                    <span>Subscription identifier</span>
+                    <strong class="generated-subscription-id" aria-live="polite">@(string.IsNullOrWhiteSpace(_model?.SubscriptionId) ? "Choose an index and endpoint" : _model?.SubscriptionId)</strong>
+                </div>
+                <div class="generated-id-parts">
+                    <div><span>Index</span><strong>@(_model?.SecondaryIndexName ?? "—")</strong></div>
+                    <div><span>Endpoint</span><strong>@(_endpointOptions.FirstOrDefault(x => x.EndpointId == (_model?.EndpointId ?? 0))?.Name ?? "—")</strong></div>
+                    <div><span>Tag</span><strong>@(string.IsNullOrWhiteSpace(_model?.Tag) ? "None" : _model?.Tag)</strong></div>
+                </div>
+                <p class="field-help">Built from the index name, endpoint name and tag.</p>
+                <span class="badge @( (_model?.Enabled ?? false) ? "badge-success" : "badge-muted")">@((_model?.Enabled ?? false) ? "Enabled" : "Disabled")</span>
+            </aside>
         </div>
 
-        <div class="form-actions">
-            <button type="submit" class="button button-primary" disabled="@_saving">
-                @(_saving ? "Saving..." : "Save subscription")
-            </button>
-            <a class="button button-secondary" href="@BackLink">Cancel</a>
-        </div>
-
-        @if (!IsCreate)
-        {
-            <div class="form-actions">
-                <button type="button" class="button button-danger" @onclick="ToggleDeleteConfirm" disabled="@_saving">
+        <div class="form-actions subscription-editor-actions">
+            @if (!IsCreate)
+            {
+                <button type="button" class="button button-danger editor-delete-button" @onclick="ToggleDeleteConfirm" disabled="@_saving">
                     @(_deleteConfirm ? "Confirm delete" : "Delete")
                 </button>
-            </div>
-        }
+            }
+            @if (_currentStep > 1)
+            {
+                <button type="button" class="button button-secondary" @onclick="GoToPreviousStep">Back</button>
+            }
+            <div class="editor-action-spacer"></div>
+            <a class="button button-secondary" href="@BackLink">Cancel</a>
+            @if (_currentStep < 4)
+            {
+                <button type="button" class="button button-primary" @onclick="GoToNextStep" disabled="@(_currentStep == 1 && !HasIndexSelection || _currentStep == 2 && (_model?.EndpointId ?? 0) <= 0)">
+                    @(_currentStep == 3 ? "Skip to preview" : "Continue")
+                </button>
+            }
+            else
+            {
+                <button type="submit" class="button button-primary" disabled="@_saving">
+                    @(_saving ? "Saving..." : IsCreate ? "Save subscription" : "Save changes")
+                </button>
+            }
+        </div>
 
         @if (_deleteConfirm && !IsCreate)
         {
@@ -299,6 +398,19 @@ else if (_model is not null)
     private bool _previewing;
     private int _previewCount = 10;
     private string _selectedIndexName = string.Empty;
+    private string _indexSearch = string.Empty;
+    private string _indexTypeFilter = "All";
+    private int _currentStep = 1;
+    private int _furthestStep = 1;
+    private bool HasIndexSelection => !string.IsNullOrWhiteSpace(_model?.SecondaryIndexName);
+
+    private IEnumerable<EventStoreIndexListItemViewModel> FilteredIndexes => _indexOptions
+        .Where(item => string.IsNullOrWhiteSpace(_indexSearch) || item.Name.Contains(_indexSearch.Trim(), StringComparison.OrdinalIgnoreCase))
+        .Where(item => _indexTypeFilter == "All" || (_indexTypeFilter == "BuiltIn" ? item.IsBuiltIn : !item.IsBuiltIn));
+
+    private IEnumerable<EventStoreIndexListItemViewModel> FilteredBuiltInIndexes => FilteredIndexes.Where(item => item.IsBuiltIn);
+    private IEnumerable<EventStoreIndexListItemViewModel> FilteredUserIndexes => FilteredIndexes.Where(item => !item.IsBuiltIn);
+    private int FilteredIndexCount => FilteredIndexes.Count();
 
     private const string CustomIndexOption = "__custom_index__";
 
@@ -320,6 +432,10 @@ else if (_model is not null)
         _previewMessage = null;
         _previewing = false;
         _previewCount = 10;
+        _indexSearch = string.Empty;
+        _indexTypeFilter = "All";
+        _currentStep = 1;
+        _furthestStep = 1;
 
         try
         {
@@ -397,6 +513,59 @@ else if (_model is not null)
         return Task.CompletedTask;
     }
 
+    private void ChooseManualIndex()
+    {
+        _selectedIndexName = CustomIndexOption;
+        if (_model is not null)
+        {
+            _model.SecondaryIndexName = string.Empty;
+            if (IsCreate)
+            {
+                _model.SubscriptionId = string.Empty;
+            }
+        }
+
+        SyncGeneratedSubscriptionId();
+        ResetPreview();
+    }
+
+    private void ShowAllIndexes() => _indexTypeFilter = "All";
+    private void ShowBuiltInIndexes() => _indexTypeFilter = "BuiltIn";
+    private void ShowUserDefinedIndexes() => _indexTypeFilter = "UserDefined";
+
+    private bool IsIndexSelected(string indexName) =>
+        string.Equals(_selectedIndexName, indexName, StringComparison.OrdinalIgnoreCase);
+
+    private void GoToStep(int step)
+    {
+        if (step >= 1 && step <= _furthestStep)
+        {
+            _currentStep = step;
+            _formError = null;
+        }
+    }
+
+    private void GoToPreviousStep() => GoToStep(_currentStep - 1);
+
+    private void GoToNextStep()
+    {
+        if (_currentStep == 1 && !HasIndexSelection)
+        {
+            _formError = "Choose an index or enter an index name to continue.";
+            return;
+        }
+
+        if (_currentStep == 2 && (_model is null || _model.EndpointId <= 0))
+        {
+            _formError = "Choose a delivery endpoint to continue.";
+            return;
+        }
+
+        _formError = null;
+        _currentStep = Math.Min(4, _currentStep + 1);
+        _furthestStep = Math.Max(_furthestStep, _currentStep);
+    }
+
     private Task OnSecondaryIndexChanged(string selectedIndex)
     {
         selectedIndex = selectedIndex?.Trim() ?? string.Empty;
@@ -461,6 +630,10 @@ else if (_model is not null)
         if (endpoint is not null && !string.IsNullOrWhiteSpace(_model.SecondaryIndexName))
         {
             _model.SubscriptionId = SubscriptionEditorModel.BuildGeneratedSubscriptionId(_model.SecondaryIndexName, endpoint.Name, _model.Tag);
+        }
+        else
+        {
+            _model.SubscriptionId = string.Empty;
         }
     }
 
