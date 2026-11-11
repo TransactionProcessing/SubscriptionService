@@ -1521,7 +1521,7 @@ button {
     }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 800px) {
     .endpoint-list-header {
         display: none;
     }
@@ -1556,6 +1556,9 @@ button {
         grid-template-columns: minmax(0, 1fr) auto;
     }
 
+}
+
+@media (max-width: 640px) {
     .endpoint-search {
         width: 100%;
         flex-basis: 100%;
