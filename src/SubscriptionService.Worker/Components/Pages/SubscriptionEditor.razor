@@ -69,7 +69,7 @@ else if (_model is not null)
 
                 <label class="field index-search-field">
                     <span class="sr-only">Search indexes</span>
-                    <InputText class="input" type="search" placeholder="Search indexes by name…" @bind-Value="_indexSearch" @bind-Value:event="oninput" />
+                    <input class="input" type="search" placeholder="Search indexes by name…" @bind="_indexSearch" @bind:event="oninput" aria-label="Search indexes by name" />
                 </label>
 
                 <div class="index-filter-tabs" role="group" aria-label="Filter indexes">
