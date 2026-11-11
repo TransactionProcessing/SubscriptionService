@@ -1240,6 +1240,118 @@ button {
     padding: 18px;
 }
 
+.endpoint-list {
+    margin-top: 4px;
+}
+
+.endpoint-search {
+    width: min(260px, 35vw);
+    min-height: 40px;
+    flex: 0 1 260px;
+}
+
+.endpoint-list-header,
+.endpoint-row {
+    display: grid;
+    grid-template-columns: minmax(145px, 1.1fr) minmax(230px, 2fr) minmax(145px, .9fr) 160px;
+    align-items: center;
+    gap: 14px;
+}
+
+.endpoint-list-header {
+    padding: 10px 12px 9px;
+    border-bottom: 1px solid var(--line-strong);
+    color: var(--muted);
+    font-size: .7rem;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+.endpoint-row {
+    min-height: 66px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.endpoint-row:last-child {
+    border-bottom: 0;
+}
+
+.endpoint-name {
+    min-width: 0;
+    font-weight: 750;
+}
+
+.endpoint-url {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: .8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.endpoint-auth {
+    display: flex;
+    min-width: 0;
+}
+
+.endpoint-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.endpoint-actions .button {
+    min-height: 36px;
+    padding: 7px 11px;
+    border-radius: 10px;
+    font-size: .8rem;
+}
+
+.endpoint-delete-confirm {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px 18px;
+    padding: 12px 0 2px;
+    border-top: 1px solid var(--line);
+}
+
+.endpoint-delete-confirm p {
+    margin: 4px 0 0;
+}
+
+.endpoint-delete-confirm .inline-alert {
+    grid-column: 1 / -1;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.endpoint-auth-section {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+}
+
+.empty-state h3 {
+    margin: 0;
+}
+
 .parked-replay-action {
     display: flex;
     align-items: center;
@@ -1406,6 +1518,72 @@ button {
     .two-column,
     .source-fields {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 800px) {
+    .endpoint-list-header {
+        display: none;
+    }
+
+    .endpoint-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 7px 14px;
+    }
+
+    .endpoint-name {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .endpoint-url {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .endpoint-auth {
+        grid-column: 1;
+        grid-row: 3;
+    }
+
+    .endpoint-actions {
+        justify-content: flex-start;
+        grid-column: 2;
+        grid-row: 1 / 4;
+    }
+
+    .endpoint-delete-confirm {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+}
+
+@media (max-width: 640px) {
+    .endpoint-search {
+        width: 100%;
+        flex-basis: 100%;
+    }
+}
+
+@media (max-width: 520px) {
+    .endpoint-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .endpoint-actions,
+    .endpoint-name,
+    .endpoint-url,
+    .endpoint-auth {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
+    .endpoint-actions {
+        justify-content: flex-start;
+    }
+
+    .endpoint-delete-confirm {
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 
