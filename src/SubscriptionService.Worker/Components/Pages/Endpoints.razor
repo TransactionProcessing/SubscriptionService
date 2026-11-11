@@ -1,7 +1,5 @@
 @page "/admin/endpoints"
-@page "/admin/endpoints/{EndpointId:int}/edit"
 @inject SubscriptionAdminService Admin
-@inject NavigationManager Navigation
 
 <PageTitle>Endpoint management</PageTitle>
 
@@ -11,71 +9,152 @@
         <h1>Endpoint management</h1>
         <p class="muted">Manage reusable delivery targets, including their authentication settings.</p>
     </div>
-    <div class="hero-actions"><a class="button button-primary" href="/admin/endpoints">New endpoint</a></div>
+    <div class="hero-actions"><NavLink class="button button-primary" href="/admin/endpoints/new">New endpoint</NavLink></div>
 </section>
 
-@if (_model is null)
-{
-    <section class="panel alert-panel"><h2>Endpoint not found.</h2></section>
-}
-else
-{
-    <EditForm Model="_model" OnValidSubmit="SaveAsync" class="form-card panel">
-        <DataAnnotationsValidator />
-        <ValidationSummary />
-        @if (_error is not null) { <div class="inline-alert danger">@_error</div> }
-        <div class="form-grid">
-            <section class="form-section">
-                <label class="field"><span>Name</span><InputText class="input" @bind-Value="_model.Name" /></label>
-                <label class="field"><span>URL</span><InputText class="input" @bind-Value="_model.Url" /></label>
-            </section>
-            <section class="form-section">
-                <label class="field"><span>Authentication scheme</span><InputText class="input" @bind-Value="_model.AuthenticationScheme" /></label>
-                <label class="field"><span>Authentication parameters JSON</span><InputTextArea class="input textarea mono" @bind-Value="_model.AuthenticationParametersJson" /></label>
-            </section>
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="button button-primary" disabled="@_saving">Save endpoint</button>
-            <a class="button button-secondary" href="/admin/endpoints">Cancel</a>
-            @if (!IsCreate) { <button type="button" class="button button-danger" @onclick="DeleteAsync" disabled="@_saving">Delete</button> }
-        </div>
-    </EditForm>
-}
-
 <section class="panel">
-    <div class="panel-header compact"><div><p class="eyebrow">Defined endpoints</p><h2>Reusable delivery targets</h2></div></div>
-    @if (_options.Count == 0) { <p class="muted">No endpoints have been defined.</p> }
-    else { <div class="card-stack">@foreach (var endpoint in _options) { <div class="parked-card"><strong>@endpoint.Name</strong><div class="muted">@endpoint.Url</div><a class="table-link" href="@($"/admin/endpoints/{endpoint.EndpointId}/edit")">Edit</a></div> }</div> }
+    <div class="panel-header compact">
+        <div>
+            <p class="eyebrow">Defined endpoints</p>
+            <h2>Reusable delivery targets</h2>
+            @if (_options.Count > 0)
+            {
+                <p class="field-help">@FilteredEndpoints.Count() of @_options.Count endpoints</p>
+            }
+        </div>
+        @if (_options.Count > 0)
+        {
+            <input class="input endpoint-search" type="search" placeholder="Search endpoints" aria-label="Search endpoints" @bind="_searchTerm" @bind:event="oninput" />
+        }
+    </div>
+    @if (_options.Count == 0)
+    {
+        <div class="empty-state">
+            <h3>No endpoints have been defined.</h3>
+            <p class="muted">Create an endpoint to use it as a subscription delivery target.</p>
+            <NavLink class="button button-primary" href="/admin/endpoints/new">New endpoint</NavLink>
+        </div>
+    }
+    else if (!FilteredEndpoints.Any())
+    {
+        <div class="empty-state compact">
+            <h3>No matching endpoints.</h3>
+            <p class="muted">Try another name, URL, or authentication scheme.</p>
+        </div>
+    }
+    else
+    {
+        <div class="endpoint-list" role="table" aria-label="Defined endpoints">
+            <div class="endpoint-list-header" role="row">
+                <span role="columnheader">Endpoint</span>
+                <span role="columnheader">Delivery URL</span>
+                <span role="columnheader">Authentication</span>
+                <span role="columnheader" class="visually-hidden">Actions</span>
+            </div>
+            @foreach (var endpoint in FilteredEndpoints)
+            {
+                <article class="endpoint-row" role="row">
+                    <strong class="endpoint-name" role="cell">@endpoint.Name</strong>
+                    <span class="endpoint-url" role="cell" title="@endpoint.Url">@endpoint.Url</span>
+                    <span class="endpoint-auth" role="cell">
+                        <span class="badge badge-muted">@(string.IsNullOrWhiteSpace(endpoint.AuthenticationScheme) ? "No authentication" : endpoint.AuthenticationScheme)</span>
+                    </span>
+                    <div class="endpoint-actions" role="cell">
+                        <a class="button button-secondary" href="@($"/admin/endpoints/{endpoint.EndpointId}/edit")">Edit</a>
+                        @if (_deleteConfirmEndpointId != endpoint.EndpointId)
+                        {
+                            <button type="button" class="button button-danger" @onclick="() => BeginEndpointDelete(endpoint.EndpointId)">Delete</button>
+                        }
+                    </div>
+                    @if (_deleteConfirmEndpointId == endpoint.EndpointId)
+                    {
+                        <div class="endpoint-delete-confirm" role="cell" aria-colspan="4">
+                            <div>
+                                <strong>Delete @endpoint.Name?</strong>
+                                <p class="muted">This removes the endpoint configuration.</p>
+                            </div>
+                            <div class="endpoint-actions">
+                                <button type="button" class="button button-danger" @onclick="() => DeleteEndpointAsync(endpoint.EndpointId)" disabled="@(_deletingEndpointId == endpoint.EndpointId)">
+                                    @(_deletingEndpointId == endpoint.EndpointId ? "Deleting..." : "Confirm delete")
+                                </button>
+                                <button type="button" class="button button-secondary" @onclick="CancelEndpointDelete" disabled="@(_deletingEndpointId == endpoint.EndpointId)">Cancel</button>
+                            </div>
+                            @if (_deleteError is not null)
+                            {
+                                <div class="inline-alert danger" role="alert">@_deleteError</div>
+                            }
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+    }
 </section>
 
 @code {
-    [Parameter] public int? EndpointId { get; set; }
-    private EndpointEditorModel? _model;
     private IReadOnlyList<EndpointViewModel> _options = [];
-    private string? _error;
-    private bool _saving;
-    private bool IsCreate => EndpointId is null or 0;
+    private string _searchTerm = string.Empty;
+    private string? _deleteError;
+    private int? _deleteConfirmEndpointId;
+    private int? _deletingEndpointId;
+
+    private IEnumerable<EndpointViewModel> FilteredEndpoints
+    {
+        get
+        {
+            var term = _searchTerm.Trim();
+            if (term.Length == 0) return _options;
+
+            return _options.Where(endpoint =>
+                endpoint.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                endpoint.Url.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                (endpoint.AuthenticationScheme?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
-        _model = await Admin.GetEndpointEditorModelAsync(EndpointId);
         _options = await Admin.GetEndpointOptionsAsync();
+        _searchTerm = string.Empty;
+        _deleteError = null;
+        _deleteConfirmEndpointId = null;
+        _deletingEndpointId = null;
     }
 
-    private async Task SaveAsync()
+    private void BeginEndpointDelete(int endpointId)
     {
-        if (_model is null) return;
-        if (!_model.TryCreate(out var endpoint, out var error) || endpoint is null) { _error = error; return; }
-        _saving = true;
-        try { await Admin.SaveEndpointAsync(endpoint); Navigation.NavigateTo("/admin/endpoints"); }
-        catch (Exception ex) { _error = ex.Message; }
-        finally { _saving = false; }
+        _deleteError = null;
+        _deleteConfirmEndpointId = endpointId;
     }
 
-    private async Task DeleteAsync()
+    private void CancelEndpointDelete()
     {
-        if (_model is null) return;
-        try { await Admin.DeleteEndpointAsync(_model.EndpointId); Navigation.NavigateTo("/admin/endpoints"); }
-        catch (Exception ex) { _error = ex.Message; }
+        _deleteError = null;
+        _deleteConfirmEndpointId = null;
+    }
+
+    private async Task DeleteEndpointAsync(int endpointId)
+    {
+        _deletingEndpointId = endpointId;
+        _deleteError = null;
+        try
+        {
+            if (!await Admin.DeleteEndpointAsync(endpointId))
+            {
+                _deleteError = "The endpoint could not be deleted.";
+                return;
+            }
+
+            _options = await Admin.GetEndpointOptionsAsync();
+            _deleteConfirmEndpointId = null;
+        }
+        catch (Exception ex)
+        {
+            _deleteError = ex.Message;
+        }
+        finally
+        {
+            _deletingEndpointId = null;
+        }
     }
 }
