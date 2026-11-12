@@ -8,6 +8,8 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+COPY ["global.json", "./"]
+COPY ["Directory.Packages.props", "./"]
 COPY ["src/SubscriptionService.Worker/SubscriptionService.Worker.csproj", "src/SubscriptionService.Worker/"]
 COPY ["src/SubscriptionService.Application/SubscriptionService.Application.csproj", "src/SubscriptionService.Application/"]
 COPY ["src/SubscriptionService.Domain/SubscriptionService.Domain.csproj", "src/SubscriptionService.Domain/"]
